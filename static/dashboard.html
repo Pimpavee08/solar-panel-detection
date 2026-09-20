@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar Detection Console</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+:root{
+  --bg:#0f141a; --panel:#161d26; --panel-2:#1d2732; --panel-3:#243040;
+  --line:#2a3644; --text:#e6edf3; --muted:#8b9bb0; --muted-2:#5f7186;
+  --accent:#facc15; --accent-ink:#1a1400; --info:#38bdf8;
+  --ok:#4ade80; --warn:#fbbf24; --err:#f87171;
+  --r:10px; --r-sm:7px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--text); overflow:hidden;
+  font-family:'Segoe UI',Tahoma,'Noto Sans Thai',sans-serif; font-size:14px;
+  display:grid; grid-template-rows:52px 1fr;
+}
+button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--panel-3);border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- header ---------- */
+header{
+  display:flex;align-items:center;gap:16px;padding:0 16px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:.2px}
+.brand .dot{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fde68a,var(--accent));box-shadow:0 0 12px rgba(250,204,21,.45)}
+.brand small{display:block;font-size:11px;font-weight:400;color:var(--muted);letter-spacing:0}
+.spacer{flex:1}
+.hlink{color:var(--muted);text-decoration:none;font-size:13px;padding:6px 10px;border-radius:var(--r-sm)}
+.hlink:hover{color:var(--text);background:var(--panel-2)}
+.pill{display:flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--line);
+  padding:5px 11px;border-radius:99px;font-size:12px;color:var(--muted)}
+.pill b{color:var(--text);font-weight:600}
+
+/* ---------- shell ---------- */
+main{display:grid;grid-template-columns:336px 1fr;min-height:0}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
+.tab{flex:1;padding:11px 0;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;transition:.15s}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);background:rgba(250,204,21,.05)}
+.pane{flex:1;overflow-y:auto;padding:16px;display:none}
+.pane.on{display:block}
+
+/* ---------- form ---------- */
+.step{margin-bottom:20px}
+.step-h{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.step-n{width:20px;height:20px;border-radius:50%;background:var(--panel-3);color:var(--muted);
+  font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0}
+.step.ready .step-n{background:var(--accent);color:var(--accent-ink)}
+.step-h h3{font-size:13px;font-weight:600}
+.hint{font-size:11.5px;color:var(--muted-2);line-height:1.6;margin-bottom:8px}
+label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px}
+input[type=text],input[type=number],select{
+  width:100%;padding:9px 10px;background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r-sm);transition:.15s}
+input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(250,204,21,.12)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chip{background:var(--panel-2);border:1px solid var(--line);padding:5px 10px;
+  border-radius:99px;font-size:11.5px;color:var(--muted);transition:.15s}
+.chip:hover{border-color:var(--accent);color:var(--text)}
+.btn{width:100%;padding:11px;border-radius:var(--r-sm);font-weight:600;transition:.15s;display:flex;
+  align-items:center;justify-content:center;gap:7px}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-primary:disabled{background:var(--panel-3);color:var(--muted-2);cursor:not-allowed;filter:none}
+
+.aoi-box{background:var(--panel-2);border:1px dashed var(--line);border-radius:var(--r-sm);
+  padding:11px;font-size:12px;color:var(--muted);text-align:center}
+.aoi-box.set{border-style:solid;border-color:rgba(250,204,21,.4);text-align:left;color:var(--text)}
+.aoi-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:11.5px;margin-top:7px}
+.aoi-grid span:nth-child(odd){color:var(--muted-2)}
+.aoi-grid span:nth-child(even){font-variant-numeric:tabular-nums}
+.alert{margin-top:8px;padding:8px 10px;border-radius:var(--r-sm);font-size:11.5px;line-height:1.5}
+.alert-warn{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--warn)}
+
+/* ---------- job list ---------- */
+.search{margin-bottom:12px}
+.job{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:11px;margin-bottom:8px;cursor:pointer;transition:.15s}
+.job:hover{border-color:var(--muted-2)}
+.job.on{border-color:var(--accent);background:rgba(250,204,21,.07)}
+.job-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.job-name{font-weight:600;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:10px;font-weight:700;padding:3px 7px;border-radius:99px;flex-shrink:0;letter-spacing:.3px}
+.b-done{background:rgba(74,222,128,.15);color:var(--ok)}
+.b-run{background:rgba(56,189,248,.15);color:var(--info)}
+.b-fail{background:rgba(248,113,113,.15);color:var(--err)}
+.job-meta{display:flex;gap:12px;font-size:11.5px;color:var(--muted)}
+.job-meta b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.job-acts{display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+.icon-btn{padding:5px 9px;border-radius:5px;font-size:11.5px;background:var(--panel-3);
+  color:var(--muted);text-decoration:none;transition:.15s}
+.icon-btn:hover{background:var(--line);color:var(--text)}
+.icon-btn.danger:hover{background:rgba(248,113,113,.18);color:var(--err)}
+.empty{text-align:center;color:var(--muted-2);font-size:12.5px;padding:34px 12px;line-height:1.7}
+
+/* ---------- progress ---------- */
+.stepper{margin-top:10px}
+.pstep{display:flex;align-items:flex-start;gap:9px;padding:5px 0;font-size:12px;color:var(--muted-2)}
+.pstep .mk{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;
+  margin-top:1px;display:grid;place-items:center;font-size:9px;transition:.2s}
+.pstep.done{color:var(--muted)}
+.pstep.done .mk{background:var(--ok);border-color:var(--ok);color:#052e16}
+.pstep.active{color:var(--info);font-weight:600}
+.pstep.active .mk{border-color:var(--info);border-right-color:transparent;animation:spin .8s linear infinite}
+.pstep.failed{color:var(--err)}
+.pstep.failed .mk{background:var(--err);border-color:var(--err);color:#450a0a}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- map ---------- */
+.map-wrap{position:relative;min-width:0}
+#map{position:absolute;inset:0;background:var(--bg)}
+.leaflet-container{background:var(--bg)}
+.leaflet-control-zoom a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--line)!important}
+.leaflet-control-zoom a:hover{background:var(--panel-2)!important}
+.leaflet-control-attribution{background:rgba(15,20,26,.75)!important;color:var(--muted-2)!important;font-size:10px}
+.leaflet-control-attribution a{color:var(--muted)!important}
+
+.float{position:absolute;z-index:500;background:rgba(22,29,38,.94);border:1px solid var(--line);
+  border-radius:var(--r);backdrop-filter:blur(10px);box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.f-tools{top:12px;left:12px;display:flex;padding:4px;gap:3px}
+.tool{padding:7px 11px;border-radius:var(--r-sm);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.tool:hover{background:var(--panel-2);color:var(--text)}
+.tool.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+
+.f-layers{top:12px;right:12px;width:212px;padding:12px;font-size:12px}
+.f-layers h4{font-size:11px;color:var(--muted-2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px}
+.f-layers h4:not(:first-child){margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.lrow{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}
+.lrow input{width:auto;accent-color:var(--accent)}
+.lrow span{flex:1}
+input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
+
+.f-stats{bottom:12px;left:12px;right:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  overflow:hidden;background:var(--line)}
+.stat{background:rgba(22,29,38,.94);padding:11px 14px}
+.stat .k{font-size:10.5px;color:var(--muted-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.stat .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent)}
+.stat .v small{font-size:11px;font-weight:500;color:var(--muted);margin-left:3px}
+
+.f-readout{top:60px;left:12px;padding:8px 12px;font-size:12px;display:none}
+.f-readout.on{display:block}
+.f-readout b{color:var(--accent);font-variant-numeric:tabular-nums}
+
+/* detections drawer */
+.drawer{position:absolute;top:12px;right:12px;bottom:76px;width:268px;z-index:500;
+  display:none;flex-direction:column;overflow:hidden}
+.drawer.on{display:flex}
+.drawer-h{display:flex;align-items:center;gap:8px;padding:11px 12px;border-bottom:1px solid var(--line);flex-shrink:0}
+.drawer-h h4{font-size:12.5px;flex:1}
+.drawer-body{overflow-y:auto;padding:8px}
+.det{padding:8px 10px;border-radius:var(--r-sm);margin-bottom:5px;cursor:pointer;
+  background:var(--panel-2);border:1px solid transparent;transition:.12s}
+.det:hover,.det.on{border-color:var(--accent)}
+.det-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px}
+.det-top b{color:var(--accent)}
+.det-sub{font-size:11px;color:var(--muted-2);display:flex;gap:10px}
+
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel-2);color:var(--text);border:1px solid var(--line)}
+.leaflet-popup-content{margin:11px 13px;font-size:12.5px;line-height:1.7}
+.leaflet-popup-content b{color:var(--accent)}
+.leaflet-popup-close-button{color:var(--muted)!important}
+
+/* toast */
+#toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;
+  display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--info);
+  padding:11px 16px;border-radius:var(--r-sm);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);
+  animation:rise .25s ease}
+.toast.ok{border-left-color:var(--ok)} .toast.err{border-left-color:var(--err)}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+
+/* จอกลาง: บีบแผงข้างและแผงชั้นข้อมูลให้เหลือที่ให้แผนที่มากขึ้น */
+@media(max-width:1180px){
+  main{grid-template-columns:288px 1fr}
+  .f-layers{width:184px;padding:10px}
+  .drawer{width:228px}
+  .stat{padding:9px 11px}
+  .stat .v{font-size:17px}
+}
+/* จอเล็ก/มือถือ: วางแผงข้างไว้ด้านบน แล้วซ่อนแผงลอยที่บังแผนที่ */
+@media(max-width:760px){
+  main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  aside{border-right:none;border-bottom:1px solid var(--line);max-height:46vh}
+  .f-stats{grid-template-columns:repeat(2,1fr)}
+  .f-layers,.drawer{display:none!important}
+  .brand small{display:none}
+  .pill{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><div class="dot"></div>
+    <div>Solar Detection Console<small>ตรวจจับแผงโซลาร์เซลล์จากภาพถ่ายดาวเทียม</small></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="pill" id="pill_job">ยังไม่ได้เลือกงาน</div>
+  <a class="hlink" href="/docs" target="_blank">Swagger UI &#8599;</a>
+</header>
+
+<main>
+  <aside>
+    <div class="tabs">
+      <button class="tab on" data-pane="new">สร้างงานใหม่</button>
+      <button class="tab" data-pane="jobs">รายการงาน <span id="task_count"></span></button>
+    </div>
+
+    <!-- ============ สร้างงานใหม่ ============ -->
+    <div class="pane on" id="pane_new">
+      <div class="step" id="s1">
+        <div class="step-h"><div class="step-n">1</div><h3>เลือกพื้นที่ที่ต้องการตรวจ</h3></div>
+        <p class="hint">กดปุ่ม &ldquo;ลากกรอบพื้นที่&rdquo; บนแผนที่แล้วลากเมาส์ครอบบริเวณที่ต้องการ หรือเลือกจากพื้นที่ตัวอย่างด้านล่าง</p>
+        <div class="chips">
+          <button class="chip" onclick="setAOI(14.0700,100.6020,14.0740,100.6070)">SIIT รังสิต</button>
+          <button class="chip" onclick="setAOI(13.5180,100.6480,13.5220,100.6530)">นิคมฯ บางปู</button>
+          <button class="chip" onclick="setAOI(13.7230,100.5250,13.7270,100.5300)">สยาม กรุงเทพฯ</button>
+        </div>
+        <div class="aoi-box" id="aoi_box">ยังไม่ได้เลือกพื้นที่</div>
+      </div>
+
+      <div class="step" id="s2">
+        <div class="step-h"><div class="step-n">2</div><h3>ตั้งค่างาน</h3></div>
+        <div style="margin-bottom:10px">
+          <label>ชื่องาน (Title) &mdash; ตั้งซ้ำกันได้ ระบบใช้ tid เป็นตัวอ้างอิง</label>
+          <input type="text" id="title" placeholder="เช่น สำรวจหลังคา SIIT รังสิต" maxlength="200">
+        </div>
+        <div>
+          <label>ระดับการซูม (Zoom) &mdash; ยิ่งสูงยิ่งละเอียดแต่ใช้เวลานานขึ้น</label>
+          <select id="zoom">
+            <option value="17">17 &mdash; หยาบ (~1.2 ม./พิกเซล)</option>
+            <option value="18" selected>18 &mdash; มาตรฐาน (~0.6 ม./พิกเซล)</option>
+            <option value="19">19 &mdash; ละเอียด (~0.3 ม./พิกเซล)</option>
+            <option value="20">20 &mdash; ละเอียดมาก (~0.15 ม./พิกเซล)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="step" id="s3">
+        <div class="step-h"><div class="step-n">3</div><h3>เริ่มประมวลผล</h3></div>
+        <button class="btn btn-primary" id="btn_run" onclick="submitJob()" disabled>เริ่มตรวจจับแผงโซลาร์เซลล์</button>
+        <div class="stepper" id="stepper"></div>
+      </div>
+    </div>
+
+    <!-- ============ รายการงาน ============ -->
+    <div class="pane" id="pane_jobs">
+      <input type="text" class="search" id="search" placeholder="ค้นหาชื่องาน..." oninput="renderTasks()">
+      <div id="job_list"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+  </aside>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <div class="float f-tools">
+      <button class="tool" id="t_draw" onclick="toggleDraw()">&#9645; ลากกรอบพื้นที่</button>
+      <button class="tool" id="t_measure" onclick="toggleMeasure()">&#128207; วัดระยะ/พื้นที่</button>
+      <button class="tool" onclick="fitResult()">&#9974; ซูมไปที่ผลลัพธ์</button>
+    </div>
+
+    <div class="float f-readout" id="readout"></div>
+
+    <div class="float f-layers">
+      <h4>แผนที่ฐาน</h4>
+      <label class="lrow"><input type="radio" name="base" value="sat" checked onchange="setBase(this.value)"><span>ภาพดาวเทียม</span></label>
+      <label class="lrow"><input type="radio" name="base" value="hyb" onchange="setBase(this.value)"><span>ดาวเทียม + ชื่อถนน</span></label>
+      <label class="lrow"><input type="radio" name="base" value="osm" onchange="setBase(this.value)"><span>แผนที่ถนน (OSM)</span></label>
+
+      <h4>ชั้นข้อมูล</h4>
+      <label class="lrow"><input type="checkbox" id="l_det" checked onchange="syncLayers()"><span>แผงที่ตรวจพบ</span></label>
+      <label class="lrow"><input type="checkbox" id="l_aoi" checked onchange="syncLayers()"><span>กรอบพื้นที่ (AOI)</span></label>
+      <label style="margin-top:8px">ความทึบของชั้นแผง <b id="op_val" style="color:var(--text)">65%</b></label>
+      <input type="range" id="l_op" min="0" max="100" value="65" oninput="syncLayers()">
+    </div>
+
+    <div class="float drawer" id="drawer">
+      <div class="drawer-h">
+        <h4>แผงที่ตรวจพบ <span id="det_count" style="color:var(--muted-2);font-weight:400"></span></h4>
+        <button class="icon-btn" onclick="exportCSV()">CSV</button>
+        <button class="icon-btn" onclick="closeDrawer()">&#10005;</button>
+      </div>
+      <div class="drawer-body" id="det_list"></div>
+    </div>
+
+    <div class="float f-stats">
+      <div class="stat"><div class="k">พื้นที่ผิวแผงรวม</div><div class="v" id="v_area">&mdash;<small>ตร.ม.</small></div></div>
+      <div class="stat"><div class="k">จำนวนแผงโดยประมาณ</div><div class="v" id="v_panels">&mdash;<small>แผง</small></div></div>
+      <div class="stat"><div class="k">กำลังการผลิตติดตั้ง</div><div class="v" id="v_cap">&mdash;<small>kWp</small></div></div>
+      <div class="stat"><div class="k">พลังงานที่ผลิตได้ต่อปี</div><div class="v" id="v_energy">&mdash;<small>MWh</small></div></div>
+    </div>
+  </div>
+</main>
+
+<div id="toasts"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* =========================================================
+   สถานะรวมของหน้าเว็บ
+   ========================================================= */
+const S = {
+  tasks: [], currentTid: null, geojson: null,
+  aoi: null,            // {min_lat,min_lng,max_lat,max_lng}
+  mode: null,           // null | 'draw' | 'measure'
+  pollTimer: null,
+};
+
+// ชื่อไทยของแต่ละ step ตามเอกสาร (generating_config -> fetch_image -> run_inference -> parse_result)
+const STEP_LABELS = {
+  generating_config: 'สร้างไฟล์ config (.toml)',
+  fetch_image: 'ดึงภาพถ่ายดาวเทียม',
+  run_inference: 'AI ตรวจจับแผงโซลาร์เซลล์',
+  parse_result: 'แปลงผลลัพธ์และบันทึกข้อมูล',
+};
+// สถานะใน DB -> คลาส CSS ของ stepper
+const STEP_CLASS = {pending:'pending', running:'active', completed:'done', failed:'failed'};
+
+const map = L.map('map', {zoomControl:true, attributionControl:true}).setView([14.0720,100.6045], 16);
+
+const BASES = {
+  sat: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {maxZoom:21, attribution:'&copy; Google'}),
+  hyb: L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {maxZoom:21, attribution:'&copy; Google'}),
+  osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap'}),
+};
+let baseLayer = BASES.sat.addTo(map);
+function setBase(k){ map.removeLayer(baseLayer); baseLayer = BASES[k].addTo(map); }
+
+const aoiLayer  = L.layerGroup().addTo(map);   // กรอบพื้นที่
+const detLayer  = L.layerGroup().addTo(map);   // ผลการตรวจจับ
+const measLayer = L.layerGroup().addTo(map);   // เส้นวัดระยะ
+let aoiRect = null, detGeo = null;
+
+/* ---------- utilities ---------- */
+const $ = id => document.getElementById(id);
+const num = (n,d=0) => (n==null||isNaN(n)) ? '—'
+  : Number(n).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+/* ชื่องานและ error มาจากผู้ใช้/ระบบ จึงต้อง escape ก่อนยัดเข้า innerHTML */
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function toast(msg, kind=''){
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind; el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';el.style.transition='.3s';setTimeout(()=>el.remove(),300)}, 3600);
+}
+
+/* พื้นที่บนทรงกลม (สูตรเดียวกับ L.GeometryUtil.geodesicArea) */
+function geoArea(latlngs){
+  const R = 6378137, rad = Math.PI/180;
+  let a = 0;
+  for(let i=0;i<latlngs.length;i++){
+    const p1 = latlngs[i], p2 = latlngs[(i+1)%latlngs.length];
+    a += (p2.lng - p1.lng) * rad * (2 + Math.sin(p1.lat*rad) + Math.sin(p2.lat*rad));
+  }
+  return Math.abs(a * R * R / 2);
+}
+
+/* จำนวน tile ที่ต้องดาวน์โหลด - backend จำกัดไว้ที่ 100 */
+function tileCount(a, z){
+  const rad = Math.PI/180, n = Math.pow(2, z);
+  const xt = lon => Math.floor((lon+180)/360*n);
+  const yt = lat => Math.floor((1 - Math.log(Math.tan(lat*rad) + 1/Math.cos(lat*rad))/Math.PI)/2*n);
+  const cx = Math.abs(xt(a.max_lng) - xt(a.min_lng)) + 1;
+  const cy = Math.abs(yt(a.max_lat) - yt(a.min_lat)) + 1;
+  return cx * cy;
+}
+
+/* =========================================================
+   เครื่องมือ: ลากกรอบพื้นที่ (AOI)
+   ========================================================= */
+function toggleDraw(){ setMode(S.mode === 'draw' ? null : 'draw'); }
+function toggleMeasure(){ setMode(S.mode === 'measure' ? null : 'measure'); }
+
+function setMode(m){
+  S.mode = m;
+  $('t_draw').classList.toggle('on', m==='draw');
+  $('t_measure').classList.toggle('on', m==='measure');
+  map.getContainer().style.cursor = m ? 'crosshair' : '';
+  if(m === 'draw') map.dragging.disable(); else map.dragging.enable();
+  if(m !== 'measure'){ measLayer.clearLayers(); measPts = []; $('readout').classList.remove('on'); }
+  if(m === 'measure') showReadout('คลิกบนแผนที่เพื่อเริ่มวัด - คลิกขวาเพื่อล้าง');
+}
+function showReadout(html){ $('readout').innerHTML = html; $('readout').classList.add('on'); }
+
+let dragStart = null, dragRect = null;
+map.on('mousedown', e => {
+  if(S.mode !== 'draw') return;
+  dragStart = e.latlng;
+  if(dragRect) aoiLayer.removeLayer(dragRect);
+  dragRect = L.rectangle([dragStart, dragStart],
+    {color:'#facc15', weight:2, dashArray:'6 4', fillOpacity:.08}).addTo(aoiLayer);
+});
+map.on('mousemove', e => {
+  if(S.mode !== 'draw' || !dragStart) return;
+  dragRect.setBounds(L.latLngBounds(dragStart, e.latlng));
+  const b = dragRect.getBounds();
+  const km2 = geoArea([b.getNorthWest(), b.getNorthEast(), b.getSouthEast(), b.getSouthWest()]) / 1e6;
+  showReadout('ขนาดพื้นที่ <b>' + num(km2, 3) + '</b> ตร.กม.');
+});
+function finishDraw(){
+  if(S.mode !== 'draw' || !dragStart || !dragRect) return;
+  const b = dragRect.getBounds();
+  dragStart = null;
+  if(b.getNorth()-b.getSouth() < 1e-5 || b.getEast()-b.getWest() < 1e-5){
+    aoiLayer.removeLayer(dragRect); dragRect = null;
+    showReadout('กรอบเล็กเกินไป - ลากให้กว้างกว่านี้'); return;
+  }
+  setAOI(b.getSouth(), b.getWest(), b.getNorth(), b.getEast(), false);
+  setMode(null);
+}
+map.on('mouseup', finishDraw);
+// เผื่อกรณีปล่อยเมาส์นอกกรอบแผนที่ ซึ่ง Leaflet จะไม่ยิง event ให้
+document.addEventListener('mouseup', finishDraw);
+document.addEventListener('keydown', e => { if(e.key === 'Escape') setMode(null); });
+
+function setAOI(minLat, minLng, maxLat, maxLng, fly){
+  if(fly === undefined) fly = true;
+  S.aoi = {min_lat:+minLat.toFixed(6), min_lng:+minLng.toFixed(6),
+           max_lat:+maxLat.toFixed(6), max_lng:+maxLng.toFixed(6)};
+  drawAOI(S.aoi);
+  if(fly) map.fitBounds([[minLat,minLng],[maxLat,maxLng]], {padding:[60,60]});
+  if(!$('title').value.trim()){
+    const t = new Date();
+    $('title').value = 'งานสำรวจ ' + t.toLocaleDateString('th-TH') + ' ' +
+      t.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  }
+  refreshForm();
+}
+
+function drawAOI(a){
+  aoiLayer.clearLayers(); dragRect = null;
+  aoiRect = L.rectangle([[a.min_lat,a.min_lng],[a.max_lat,a.max_lng]],
+    {color:'#facc15', weight:2, dashArray:'6 4', fill:true, fillOpacity:.06}).addTo(aoiLayer);
+  syncLayers();
+}
+
+function refreshForm(){
+  const box = $('aoi_box'), a = S.aoi;
+  if(!a){
+    box.className = 'aoi-box'; box.textContent = 'ยังไม่ได้เลือกพื้นที่';
+    $('s1').classList.remove('ready'); $('btn_run').disabled = true; return;
+  }
+  const km2 = geoArea([L.latLng(a.max_lat,a.min_lng), L.latLng(a.max_lat,a.max_lng),
+                       L.latLng(a.min_lat,a.max_lng), L.latLng(a.min_lat,a.min_lng)])/1e6;
+  const tiles = tileCount(a, +$('zoom').value);
+  box.className = 'aoi-box set';
+  box.innerHTML = '<b>พื้นที่ที่เลือก</b>' +
+    '<div class="aoi-grid">' +
+      '<span>มุมล่างซ้าย</span><span>' + a.min_lat + ', ' + a.min_lng + '</span>' +
+      '<span>มุมบนขวา</span><span>' + a.max_lat + ', ' + a.max_lng + '</span>' +
+      '<span>ขนาด</span><span>' + num(km2,3) + ' ตร.กม.</span>' +
+      '<span>จำนวน tile</span><span>' + tiles + ' / 100</span>' +
+    '</div>' +
+    (tiles > 100 ? '<div class="alert alert-warn">พื้นที่ใหญ่เกินขีดจำกัด (100 tile) - ลดขนาดกรอบหรือลดระดับซูมลง</div>' : '');
+  $('s1').classList.add('ready');
+  $('s2').classList.add('ready');
+  $('btn_run').disabled = tiles > 100;
+}
+$('zoom').addEventListener('change', refreshForm);
+
+/* =========================================================
+   เครื่องมือ: วัดระยะ / พื้นที่
+   ========================================================= */
+let measPts = [];
+map.on('click', e => {
+  if(S.mode !== 'measure') return;
+  measPts.push(e.latlng);
+  measLayer.clearLayers();
+  L.polyline(measPts, {color:'#38bdf8', weight:2, dashArray:'5 4'}).addTo(measLayer);
+  measPts.forEach(p => L.circleMarker(p,{radius:4,color:'#38bdf8',fillColor:'#0f141a',fillOpacity:1}).addTo(measLayer));
+
+  let dist = 0;
+  for(let i=1;i<measPts.length;i++) dist += measPts[i-1].distanceTo(measPts[i]);
+  let html = 'ระยะรวม <b>' + (dist<1000 ? num(dist,1)+' ม.' : num(dist/1000,3)+' กม.') + '</b>';
+  if(measPts.length >= 3){
+    L.polygon(measPts,{color:'#38bdf8',weight:1,fillOpacity:.12}).addTo(measLayer);
+    html += ' &nbsp;&middot;&nbsp; พื้นที่ <b>' + num(geoArea(measPts),1) + '</b> ตร.ม.';
+  }
+  showReadout(html + '<br><span style="color:var(--muted-2);font-size:11px">คลิกขวาเพื่อล้าง &middot; Esc เพื่อออก</span>');
+});
+map.on('contextmenu', () => {
+  if(S.mode !== 'measure') return;
+  measPts = []; measLayer.clearLayers();
+  showReadout('คลิกบนแผนที่เพื่อเริ่มวัด');
+});
+
+/* =========================================================
+   ชั้นข้อมูล
+   ========================================================= */
+function syncLayers(){
+  const op = +$('l_op').value / 100;
+  $('op_val').textContent = $('l_op').value + '%';
+  const showAoi = $('l_aoi').checked;
+  aoiLayer.eachLayer(l => l.setStyle({opacity: showAoi?1:0, fillOpacity: showAoi?.06:0}));
+  const showDet = $('l_det').checked;
+  if(detGeo) detGeo.setStyle({opacity: showDet?1:0, fillOpacity: showDet?op:0});
+}
+
+/* =========================================================
+   สร้างงานใหม่ + ติดตามความคืบหน้า
+   ========================================================= */
+async function submitJob(){
+  const title = $('title').value.trim();
+  if(!S.aoi) return toast('กรุณาเลือกพื้นที่ก่อน', 'err');
+  if(!title) return toast('กรุณาตั้งชื่องาน', 'err');
+
+  const payload = Object.assign({title:title, zoom:+$('zoom').value}, S.aoi);
+  $('btn_run').disabled = true;
+  try{
+    const res = await fetch('/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const data = await res.json();
+    if(!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'สั่งรันไม่สำเร็จ');
+    toast('เริ่มงาน "' + title + '" แล้ว', 'ok');
+    S.currentTid = data.tid;
+    $('pill_job').innerHTML = 'งานปัจจุบัน: <b>' + title + '</b>';
+    $('s3').classList.add('ready');
+    loadTasks(); trackProgress(data.tid, title);
+  }catch(err){
+    toast(err.message, 'err'); $('btn_run').disabled = false;
+  }
+}
+
+function trackProgress(tid, title){
+  clearInterval(S.pollTimer);
+  const tick = async () => {
+    try{
+      const res = await fetch('/tasks/' + tid + '/progress');
+      if(!res.ok) return;
+      const p = await res.json();
+      renderStepper(p);
+      if(p.state !== 'running'){
+        clearInterval(S.pollTimer); S.pollTimer = null;
+        $('btn_run').disabled = false;
+        await loadTasks();
+        if(p.state === 'completed'){ toast('งาน "' + title + '" เสร็จแล้ว', 'ok'); openTask(tid); }
+        else toast('งาน "' + title + '" ล้มเหลว', 'err');
+      }
+    }catch(e){ /* เงียบไว้ แล้วลองใหม่รอบหน้า */ }
+  };
+  tick(); S.pollTimer = setInterval(tick, 2000);
+}
+
+function renderStepper(p){
+  const mark = {completed:'✓', failed:'!', running:'', pending:''};
+  let html = p.steps.map(s => {
+    // retry_count > 0 แปลว่า step นี้เคยล้มเหลวแล้วกำลังลองใหม่ ตามกฎ retry สูงสุด 5 ครั้ง
+    const retry = s.retry_count > 0
+      ? ' <span style="color:var(--warn)">(ลองใหม่ ' + s.retry_count + '/5)</span>' : '';
+    return '<div class="pstep ' + STEP_CLASS[s.status] + '">' +
+      '<div class="mk">' + (mark[s.status] || '') + '</div>' +
+      '<div>' + (STEP_LABELS[s.step_name] || s.step_name) + retry + '</div></div>';
+  }).join('');
+
+  const failed = p.steps.find(s => s.status === 'failed');
+  if(failed && failed.error_msg){
+    html += '<div class="alert alert-warn" style="margin-top:8px"><b>สาเหตุ:</b><br>' +
+            esc(failed.error_msg) + '</div>';
+  }
+  $('stepper').innerHTML = html;
+}
+
+/* =========================================================
+   รายการงาน
+   ========================================================= */
+async function loadTasks(){
+  try{
+    const res = await fetch('/tasks');
+    S.tasks = await res.json();
+    $('task_count').textContent = '(' + S.tasks.length + ')';
+    renderTasks();
+  }catch(e){}
+}
+
+function renderTasks(){
+  const q = $('search').value.trim().toLowerCase();
+  const list = S.tasks.filter(t => t.title.toLowerCase().includes(q) || t.tid.includes(q));
+  const box = $('job_list');
+
+  if(!list.length){
+    box.innerHTML = '<div class="empty">' +
+      (S.tasks.length ? 'ไม่พบงานที่ค้นหา' : 'ยังไม่มีงานในระบบ<br>เริ่มจากแท็บ &ldquo;สร้างงานใหม่&rdquo;') +
+      '</div>';
+    return;
+  }
+
+  box.innerHTML = list.map(t => {
+    const st = t.state === 'completed' ? ['b-done','เสร็จสิ้น']
+             : t.state === 'failed'    ? ['b-fail','ล้มเหลว']
+             : ['b-run','กำลังประมวลผล'];
+    const r = t.result;
+    return '<div class="job ' + (t.tid===S.currentTid?'on':'') + '" onclick="openTask(\'' + t.tid + '\')">' +
+      '<div class="job-top">' +
+        '<div class="job-name">' + esc(t.title) + '</div>' +
+        '<div class="badge ' + st[0] + '">' + st[1] + '</div>' +
+      '</div>' +
+      '<div class="job-meta">' +
+        '<div><b>' + num(r ? r.panel_count : null) + '</b> แผง</div>' +
+        '<div><b>' + num(r ? r.surface_area : null) + '</b> ตร.ม.</div>' +
+        '<div style="color:var(--muted-2)">' + t.tid.slice(0,8) + '</div>' +
+      '</div>' +
+      '<div class="job-acts" onclick="event.stopPropagation()">' +
+        '<a class="icon-btn" href="/tasks/' + t.tid + '/geojson">GeoJSON</a>' +
+        '<a class="icon-btn" href="/tasks/' + t.tid + '/satellite">ภาพ TIF</a>' +
+        '<button class="icon-btn" onclick="reuseAOI(\'' + t.tid + '\')">ใช้พื้นที่นี้</button>' +
+        '<button class="icon-btn danger" onclick="removeTask(\'' + t.tid + '\')">ลบ</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function reuseAOI(tid){
+  const t = S.tasks.find(x => x.tid === tid);
+  if(!t) return;
+  setAOI(t.bbox_min_lat, t.bbox_min_lng, t.bbox_max_lat, t.bbox_max_lng);
+  if(t.zoom) $('zoom').value = t.zoom;
+  $('title').value = '';
+  switchTab('new');
+  refreshForm();
+  toast('นำพิกัดของ "' + t.title + '" มาใช้แล้ว');
+}
+
+async function removeTask(tid){
+  const t = S.tasks.find(x => x.tid === tid);
+  const label = t ? t.title : tid;
+  if(!confirm('ต้องการลบงาน "' + label + '" และไฟล์ทั้งหมดใช่หรือไม่?')) return;
+  await fetch('/tasks/' + tid, {method:'DELETE'});
+  if(S.currentTid === tid){ S.currentTid = null; clearResult(); }
+  toast('ลบงาน "' + label + '" แล้ว');
+  loadTasks();
+}
+
+/* =========================================================
+   เปิดดูผลลัพธ์
+   ========================================================= */
+async function openTask(tid){
+  S.currentTid = tid;
+  renderTasks();
+
+  let task = S.tasks.find(t => t.tid === tid);
+  if(!task){
+    try{ task = await (await fetch('/tasks/' + tid)).json(); }catch(e){ return; }
+  }
+
+  $('pill_job').innerHTML = 'งานปัจจุบัน: <b>' + esc(task.title) + '</b>';
+
+  const r = task.result;
+  $('v_area').innerHTML   = num(r ? r.surface_area : null) + '<small>ตร.ม.</small>';
+  $('v_panels').innerHTML = num(r ? r.panel_count : null) + '<small>แผง</small>';
+  $('v_cap').innerHTML    = '—';  // Task_Result ไม่ได้เก็บ kWp จึงรวมจาก GeoJSON แทน
+  $('v_energy').innerHTML = num(r ? r.power_generation/1000 : null, 1) + '<small>MWh</small>';
+
+  drawAOI({min_lat:task.bbox_min_lat, min_lng:task.bbox_min_lng,
+           max_lat:task.bbox_max_lat, max_lng:task.bbox_max_lng});
+
+  if(task.state === 'running'){ switchTab('new'); trackProgress(tid, task.title); }
+
+  detLayer.clearLayers(); detGeo = null; S.geojson = null;
+  try{
+    const res = await fetch('/tasks/' + tid + '/geojson');
+    if(!res.ok){ closeDrawer(); fitResult(); return; }
+    S.geojson = await res.json();
+    renderDetections(S.geojson);
+  }catch(e){ closeDrawer(); }
+}
+
+function renderDetections(gj){
+  const feats = gj.features || [];
+  feats.forEach((f,i) => { f.__i = i; });
+
+  detGeo = L.geoJSON(gj, {
+    style: {color:'#22d3ee', weight:1.5, fillColor:'#06b6d4'},
+    onEachFeature: (f, layer) => {
+      const p = f.properties || {};
+      layer.bindPopup('<b>แผงโซลาร์เซลล์</b><br>' +
+        'พื้นที่ ' + num(p.area_sqm,2) + ' ตร.ม.<br>' +
+        'ประมาณ ' + num(p.estimated_panels) + ' แผง<br>' +
+        'กำลังผลิต ' + num(p.capacity_kwp,2) + ' kWp<br>' +
+        'ต่อปี ' + num(p.annual_generation_kwh) + ' kWh');
+      layer.on('click', () => highlight(f.__i));
+    }
+  }).addTo(detLayer);
+
+  // เรียงจากแปลงใหญ่ไปเล็ก เพื่อให้แปลงสำคัญอยู่บนสุดของรายการ
+  const order = feats.map((f,i) => ({i, a:(f.properties||{}).area_sqm || 0}))
+                     .sort((x,y) => y.a - x.a);
+
+  // Task_Result เก็บแค่ surface_area / power_generation / panel_count ตามสเปก
+  // กำลังติดตั้ง (kWp) จึงรวมเอาจาก attribute รายแปลงใน GeoJSON
+  const totalKwp = feats.reduce((sum,f) => sum + ((f.properties||{}).capacity_kwp || 0), 0);
+  $('v_cap').innerHTML = num(totalKwp, 1) + '<small>kWp</small>';
+
+  $('det_count').textContent = '(' + feats.length + ')';
+  $('det_list').innerHTML = order.map(o => {
+    const p = feats[o.i].properties || {};
+    return '<div class="det" id="det_' + o.i + '" onclick="zoomTo(' + o.i + ')">' +
+      '<div class="det-top"><span>แปลงที่ ' + (o.i+1) + '</span><b>' + num(o.a,1) + ' ตร.ม.</b></div>' +
+      '<div class="det-sub"><span>' + num(p.estimated_panels) + ' แผง</span><span>' + num(p.capacity_kwp,2) + ' kWp</span></div>' +
+    '</div>';
+  }).join('') || '<div class="empty">ไม่พบแผงโซลาร์เซลล์ในพื้นที่นี้</div>';
+
+  $('drawer').classList.toggle('on', feats.length > 0);
+  syncLayers();
+  fitResult();
+}
+
+function layerAt(i){
+  let found = null;
+  if(detGeo) detGeo.eachLayer(l => { if(l.feature && l.feature.__i === i) found = l; });
+  return found;
+}
+function highlight(i){
+  document.querySelectorAll('.det').forEach(el => el.classList.remove('on'));
+  const el = $('det_' + i);
+  if(el){ el.classList.add('on'); el.scrollIntoView({block:'nearest', behavior:'smooth'}); }
+}
+function zoomTo(i){
+  const l = layerAt(i);
+  if(!l) return;
+  map.fitBounds(l.getBounds(), {maxZoom:20, padding:[80,80]});
+  l.openPopup(); highlight(i);
+}
+function fitResult(){
+  if(detGeo && detGeo.getLayers().length) map.fitBounds(detGeo.getBounds(), {padding:[70,70]});
+  else if(aoiRect) map.fitBounds(aoiRect.getBounds(), {padding:[70,70]});
+}
+function closeDrawer(){ $('drawer').classList.remove('on'); }
+function clearResult(){
+  detLayer.clearLayers(); detGeo = null; S.geojson = null; closeDrawer();
+  $('pill_job').textContent = 'ยังไม่ได้เลือกงาน';
+  ['v_area','v_panels','v_cap','v_energy'].forEach(id => { $(id).innerHTML = '—'; });
+}
+
+function exportCSV(){
+  if(!S.geojson || !S.geojson.features || !S.geojson.features.length) return;
+  const cols = ['area_sqm','estimated_panels','capacity_kwp','annual_generation_kwh'];
+  const rows = [['polygon_id'].concat(cols).join(',')];
+  S.geojson.features.forEach((f,i) => {
+    const p = f.properties || {};
+    rows.push([i+1].concat(cols.map(c => p[c] == null ? '' : p[c])).join(','));
+  });
+  const url = URL.createObjectURL(new Blob(['﻿' + rows.join('\n')], {type:'text/csv;charset=utf-8'}));
+  const a = document.createElement('a');
+  const t = S.tasks.find(x => x.tid === S.currentTid);
+  a.href = url;
+  a.download = ((t && t.title) || 'result').replace(/[\/:*?"<>|]/g,'_') + '-detections.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* =========================================================
+   แท็บ + เริ่มต้น
+   ========================================================= */
+function switchTab(k){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.pane === k));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane_' + k));
+}
+document.querySelectorAll('.tab').forEach(t => { t.onclick = () => switchTab(t.dataset.pane); });
+
+loadTasks();
+setInterval(() => { if(!S.pollTimer) loadTasks(); }, 8000);
+</script>
+</body>
+</html>

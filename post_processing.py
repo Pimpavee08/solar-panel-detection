@@ -71,7 +71,7 @@ def process_shapefile_to_geojson(
     job_name: str = "job_default",
     panel_area_m2: float = 2.541,  # สเปกอาจารย์
     wp_per_m2: float = 180.0,
-    db_path: str = "data/solar_jobs.db",
+    db_path: str | None = "data/solar_jobs.db",
 ) -> dict:
   """อ่าน Shapefile -> คำนวณรายแผง -> สรุปรวมทั้ง Job -> บันทึก GeoJSON, JSON และ Database"""
   job_dir = os.path.dirname(output_geojson_path)
@@ -112,7 +112,8 @@ def process_shapefile_to_geojson(
     }
     with open(summary_json_path, "w", encoding="utf-8") as f:
       json.dump(summary, f, indent=4)
-    save_summary_to_db(job_name, summary, db_path)
+    if db_path:
+      save_summary_to_db(job_name, summary, db_path)
     return summary
 
   # 2. แปลงเป็น UTM 47N เพื่อคำนวณพื้นที่จริง (หน่วยเมตร)
@@ -148,6 +149,7 @@ def process_shapefile_to_geojson(
           gdf_utm["annual_generation_kwh"].sum().round(2)
       ),
       "geojson_path": output_geojson_path,
+      "shapefile_path": target_shp,
       "processed_at": datetime.now().isoformat(),
   }
 
@@ -156,7 +158,8 @@ def process_shapefile_to_geojson(
     json.dump(summary, f, indent=4, ensure_ascii=False)
   print(f"Summary JSON created at: {summary_json_path}")
 
-  # 7. บันทึกลงฐานข้อมูล Database
-  save_summary_to_db(job_name, summary, db_path)
+  # 7. บันทึกลงตารางเดิม (ข้ามได้ถ้าผู้เรียกจัดการเองผ่าน Task_Result)
+  if db_path:
+    save_summary_to_db(job_name, summary, db_path)
 
   return summary

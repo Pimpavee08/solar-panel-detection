@@ -50,36 +50,57 @@ TOML_TEMPLATE = """[inference]
 """
 
 
-def execute_model_inference(job_name: str, base_dir: str = "data/inference"):
-  """สร้างไฟล์ config .toml ตามสเปกของอาจารย์ และสั่งรันโมเดล Inference"""
-  job_dir = os.path.join(base_dir, job_name)
-  output_dir = os.path.join(job_dir, "output")
-  os.makedirs(output_dir, exist_ok=True)
+def generate_config(job_name: str, base_dir: str = "data/inference") -> str:
+  """Step 1 (generating_config): สร้างไฟล์ .toml ของงานนี้ แล้วคืน path ของไฟล์
 
-  # 1. บันทึกไฟล์ .toml สำหรับ Job นี้
+  job_name ที่ส่งเข้ามาคือ tid ของ Task จึงทำให้ทุก path ใน config
+  ชี้ไปที่โฟลเดอร์เฉพาะของงานนั้น (data/inference/{tid}/...)
+  """
+  job_dir = os.path.join(base_dir, job_name)
+  os.makedirs(os.path.join(job_dir, "output"), exist_ok=True)
+
   config_content = TOML_TEMPLATE.format(
       inference_path=base_dir.replace("\\", "/") + "/", job_name=job_name
   )
-  config_filename = f"{job_name}.toml"
-  config_path = os.path.join(job_dir, config_filename)
+  config_path = os.path.join(job_dir, f"{job_name}.toml")
 
   with open(config_path, "w", encoding="utf-8") as f:
     f.write(config_content)
   print(f"Generated TOML config at: {config_path}")
+  return config_path
 
-  # 2. ตรวจสอบว่าอยู่บนเซิร์ฟเวอร์จริง (มี run.sh) หรือกำลังทดสอบในเครื่อง (Windows)
+
+def run_inference(job_name: str, base_dir: str = "data/inference") -> str:
+  """Step 3 (run_inference): สั่งรันโมเดลด้วยไฟล์ config ที่สร้างไว้แล้ว
+
+  บนเซิร์ฟเวอร์จริงจะเรียก run.sh ตามสเปกของอาจารย์
+  ส่วนบนเครื่อง local จะ fallback ไปใช้ mock_model.py แทน
+  """
+  job_dir = os.path.join(base_dir, job_name)
+  output_dir = os.path.join(job_dir, "output")
+  config_path = os.path.join(job_dir, f"{job_name}.toml")
+
+  if not os.path.exists(config_path):
+    raise FileNotFoundError(f"ไม่พบไฟล์ config ที่ {config_path}")
+
+  os.makedirs(output_dir, exist_ok=True)
+
   if os.path.exists("./run.sh"):
-    # คำสั่งจริงบนเซิร์ฟเวอร์ตามสไลด์ของอาจารย์
     cmd = ["./run.sh", f"5 -f {config_path}"]
   else:
-    # รันผ่าน mock_model.py สำหรับทดสอบบนเครื่อง Local
     cmd = ["python", "mock_model.py", "--config", config_path]
 
   print(f"Executing: {' '.join(cmd)}")
   process = subprocess.run(cmd, capture_output=True, text=True, shell=True)
 
   if process.returncode != 0:
-    raise RuntimeError(f"Model execution failed: {process.stderr}")
+    raise RuntimeError(f"Model execution failed: {process.stderr.strip()}")
 
   print("Model execution completed successfully.")
   return output_dir
+
+
+def execute_model_inference(job_name: str, base_dir: str = "data/inference"):
+  """สร้าง config แล้วรันโมเดลต่อในครั้งเดียว (ใช้โดย main.py และ DAG เดิม)"""
+  generate_config(job_name, base_dir=base_dir)
+  return run_inference(job_name, base_dir=base_dir)
