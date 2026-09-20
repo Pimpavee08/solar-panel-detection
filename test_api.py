@@ -12,10 +12,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+# ปกติ conftest.py ตั้งค่านี้ให้แล้ว บรรทัดนี้เผื่อกรณีรันไฟล์นี้ตรง ๆ
 _TMP_DIR = tempfile.mkdtemp(prefix="solar_test_")
-os.environ["SOLAR_DATABASE_URL"] = "sqlite:///" + os.path.join(
-    _TMP_DIR, "test.db"
-).replace("\\", "/")
+os.environ.setdefault(
+    "SOLAR_DATABASE_URL",
+    "sqlite:///" + os.path.join(_TMP_DIR, "test.db").replace("\\", "/"),
+)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -60,10 +62,6 @@ class TestSolarAPI(unittest.TestCase):
 
   def tearDown(self):
     _clear_tasks()
-
-  @classmethod
-  def tearDownClass(cls):
-    shutil.rmtree(_TMP_DIR, ignore_errors=True)
 
   # ---------- หน้าเว็บ ----------
   def test_read_root(self):

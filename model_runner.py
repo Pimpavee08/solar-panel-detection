@@ -1,6 +1,11 @@
 import os
 import shutil
 import subprocess
+import sys
+
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+RUN_SH = os.path.join(PROJECT_DIR, "run.sh")
+MOCK_MODEL = os.path.join(PROJECT_DIR, "mock_model.py")
 
 TOML_TEMPLATE = """[inference]
     inference_path = '{inference_path}'
@@ -85,10 +90,10 @@ def run_inference(job_name: str, base_dir: str = "data/inference") -> str:
 
   os.makedirs(output_dir, exist_ok=True)
 
-  if os.path.exists("./run.sh"):
-    cmd = ["./run.sh", f"5 -f {config_path}"]
+  if os.path.exists(RUN_SH):
+    cmd = [RUN_SH, f"5 -f {config_path}"]
   else:
-    cmd = ["python", "mock_model.py", "--config", config_path]
+    cmd = [sys.executable, MOCK_MODEL, "--config", config_path]
 
   print(f"Executing: {' '.join(cmd)}")
   process = subprocess.run(cmd, capture_output=True, text=True, shell=True)

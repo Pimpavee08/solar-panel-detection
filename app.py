@@ -15,12 +15,14 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import selectinload
 
+import airflow_client
 import pipeline
 from db import init_db, session_scope
 from models import (
     STATUS_COMPLETED,
     STATUS_FAILED,
     STATUS_RUNNING,
+    STEP_NAMES,
     STEP_PARSE_RESULT,
     Task,
     TaskStep,
@@ -166,6 +168,16 @@ def read_root():
     return HTMLResponse(f.read())
 
 
+@app.get("/health", tags=["General"])
+def health():
+  """บอกว่าตอนนี้ pipeline ถูกรันด้วยอะไร และ Airflow ติดต่อได้หรือไม่"""
+  info = airflow_client.health()
+  return {
+      "executor": "airflow" if info["enabled"] else "background",
+      "airflow": info,
+  }
+
+
 # -------------------------------------------------------------
 # Tasks
 # -------------------------------------------------------------
@@ -193,12 +205,29 @@ def create_task(payload: TaskCreate, background_tasks: BackgroundTasks):
       zoom=payload.zoom,
   )
 
-  background_tasks.add_task(pipeline.run_task, tid)
+  # ตั้ง SOLAR_AIRFLOW_URL ไว้ = ให้ Airflow เป็นคนรัน ไม่ได้ตั้ง = รันในโปรเซสนี้
+  executor = "airflow"
+  dag_run_id = None
+  if airflow_client.is_enabled():
+    try:
+      dag_run_id = airflow_client.trigger_dag(tid)
+    except airflow_client.AirflowError as exc:
+      # สั่ง Airflow ไม่ได้ ถือว่างานนี้ล้มเหลวตั้งแต่ step แรก จะได้ไม่ค้าง pending
+      pipeline.mark_step_failed(tid, STEP_NAMES[0], str(exc))
+      raise HTTPException(
+          status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+          detail=f"สั่งงาน Airflow ไม่สำเร็จ: {exc}",
+      ) from exc
+  else:
+    executor = "background"
+    background_tasks.add_task(pipeline.run_task, tid)
 
   return {
       "tid": tid,
       "title": title,
       "status": "generating_config:pending",
+      "executor": executor,
+      "dag_run_id": dag_run_id,
       "message": f"สร้าง Task '{title}' แล้ว ติดตามสถานะที่ GET /tasks/{tid}/progress",
   }
 

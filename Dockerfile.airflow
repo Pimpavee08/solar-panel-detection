@@ -1,0 +1,16 @@
+# Airflow image ที่ติดตั้ง dependency ด้านภูมิสารสนเทศของโปรเจกต์เพิ่มเข้าไป
+# เพราะ task ใน DAG เรียก rasterio / geopandas / shapely โดยตรง
+FROM apache/airflow:2.10.5-python3.12
+
+USER root
+# rasterio กับ geopandas ต้องใช้ไลบรารีระบบของ GDAL/PROJ
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gdal-bin libgdal-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+COPY requirements.txt /tmp/solar-requirements.txt
+# psycopg2-binary ใช้ต่อ Postgres ที่เป็นทั้ง metadata DB ของ Airflow
+# และฐานข้อมูลของโปรเจกต์
+RUN pip install --no-cache-dir -r /tmp/solar-requirements.txt psycopg2-binary

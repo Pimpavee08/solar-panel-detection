@@ -40,7 +40,8 @@ from models import (
 )
 from post_processing import process_shapefile_to_geojson
 
-BASE_DIR = "data/inference"
+# ตั้ง SOLAR_DATA_DIR เมื่อรันใน container ของ Airflow ให้ชี้มาที่โฟลเดอร์เดียวกับเว็บ
+BASE_DIR = os.environ.get("SOLAR_DATA_DIR", os.path.join("data", "inference"))
 
 # โฟลเดอร์ผลลัพธ์ที่โมเดลสร้างขึ้น ต้องล้างทิ้งก่อน retry เพื่อไม่ให้ไฟล์เก่าปน
 WORK_FOLDERS = ["output", "input_tile", "mask_tile", "mask_tile_raw"]
@@ -179,6 +180,73 @@ def _update_step(
       task.updated_at = datetime.now()
 
 
+def load_task_params(tid: str) -> dict | None:
+  """อ่านค่าที่ step ต้องใช้ออกมาเป็น dict ธรรมดา เพื่อไม่ต้องถือ session ไว้ข้ามขั้น"""
+  with session_scope() as session:
+    task = session.get(Task, tid)
+    if task is None:
+      return None
+    return {
+        "bbox_min_lat": task.bbox_min_lat,
+        "bbox_min_lng": task.bbox_min_lng,
+        "bbox_max_lat": task.bbox_max_lat,
+        "bbox_max_lng": task.bbox_max_lng,
+        "zoom": task.zoom,
+    }
+
+
+# ---- ตัวห่อสำหรับให้ Airflow DAG เรียก (ดูใน solar_pipeline_dag.py) ----
+def mark_step_running(tid: str, step_name: str, retry_count: int = 0) -> None:
+  _update_step(
+      tid, step_name, STATUS_RUNNING, retry_count=retry_count, mark_started=True
+  )
+
+
+def mark_step_completed(tid: str, step_name: str, retry_count: int = 0) -> None:
+  _update_step(
+      tid,
+      step_name,
+      STATUS_COMPLETED,
+      retry_count=retry_count,
+      mark_completed=True,
+  )
+
+
+def mark_step_retrying(
+    tid: str, step_name: str, error_msg: str, retry_count: int
+) -> None:
+  """ยังไม่หมดโควต้า retry — สถานะคงเป็น running ตามเอกสาร แล้วล้างโฟลเดอร์"""
+  _update_step(
+      tid,
+      step_name,
+      STATUS_RUNNING,
+      error_msg=error_msg,
+      retry_count=retry_count,
+  )
+  clean_work_dirs(tid, keep_input=(step_name != STEP_FETCH_IMAGE))
+
+
+def mark_step_failed(
+    tid: str, step_name: str, error_msg: str, retry_count: int = MAX_RETRY
+) -> None:
+  _update_step(
+      tid,
+      step_name,
+      STATUS_FAILED,
+      error_msg=error_msg,
+      retry_count=retry_count,
+      mark_completed=True,
+  )
+
+
+def run_step(tid: str, step_name: str) -> None:
+  """รัน step หนึ่งขั้นแบบไม่ retry — ให้ Airflow เป็นคนจัดการ retry เอง"""
+  params = load_task_params(tid)
+  if params is None:
+    raise RuntimeError(f"ไม่พบ Task {tid} ในฐานข้อมูล")
+  STEP_FUNCTIONS[step_name](tid, params)
+
+
 def _save_result(tid: str, summary: dict, overlay: str | None) -> None:
   """เขียน Task_Result — ทำเฉพาะตอน parse_result สำเร็จเท่านั้น (ตามเอกสารข้อ 6)"""
   with session_scope() as session:
@@ -257,9 +325,7 @@ def _run_step_with_retry(tid: str, step_name: str, task: dict) -> bool:
   retry_count = 0
 
   while True:
-    _update_step(
-        tid, step_name, STATUS_RUNNING, retry_count=retry_count, mark_started=True
-    )
+    mark_step_running(tid, step_name, retry_count=retry_count)
     try:
       fn(tid, task)
     except Exception as exc:  # noqa: BLE001 — ต้องจับทุกชนิดเพื่อบันทึกลง DB
@@ -269,51 +335,22 @@ def _run_step_with_retry(tid: str, step_name: str, task: dict) -> bool:
       traceback.print_exc()
 
       if retry_count >= MAX_RETRY:
-        _update_step(
-            tid,
-            step_name,
-            STATUS_FAILED,
-            error_msg=message,
-            retry_count=retry_count,
-            mark_completed=True,
-        )
+        mark_step_failed(tid, step_name, message, retry_count=retry_count)
         return False
 
-      # ยัง retry ได้ — สถานะคงเป็น running ตามเอกสาร แต่เก็บ error ล่าสุดไว้ดู
-      _update_step(
-          tid,
-          step_name,
-          STATUS_RUNNING,
-          error_msg=message,
-          retry_count=retry_count,
-      )
-      clean_work_dirs(tid, keep_input=(step_name != STEP_FETCH_IMAGE))
+      mark_step_retrying(tid, step_name, message, retry_count=retry_count)
       continue
 
-    _update_step(
-        tid,
-        step_name,
-        STATUS_COMPLETED,
-        retry_count=retry_count,
-        mark_completed=True,
-    )
+    mark_step_completed(tid, step_name, retry_count=retry_count)
     return True
 
 
 def run_task(tid: str) -> None:
   """เดิน Task ตั้งแต่ step แรกจนจบ หยุดทันทีเมื่อมี step ใด failed"""
-  with session_scope() as session:
-    task_row = session.get(Task, tid)
-    if task_row is None:
-      print(f"[pipeline] ไม่พบ Task {tid}")
-      return
-    task = {
-        "bbox_min_lat": task_row.bbox_min_lat,
-        "bbox_min_lng": task_row.bbox_min_lng,
-        "bbox_max_lat": task_row.bbox_max_lat,
-        "bbox_max_lng": task_row.bbox_max_lng,
-        "zoom": task_row.zoom,
-    }
+  task = load_task_params(tid)
+  if task is None:
+    print(f"[pipeline] ไม่พบ Task {tid}")
+    return
 
   for step_name in STEP_NAMES:
     if not _run_step_with_retry(tid, step_name, task):
