@@ -43,8 +43,22 @@ from post_processing import process_shapefile_to_geojson
 # ตั้ง SOLAR_DATA_DIR เมื่อรันใน container ของ Airflow ให้ชี้มาที่โฟลเดอร์เดียวกับเว็บ
 BASE_DIR = os.environ.get("SOLAR_DATA_DIR", os.path.join("data", "inference"))
 
-# โฟลเดอร์ผลลัพธ์ที่โมเดลสร้างขึ้น ต้องล้างทิ้งก่อน retry เพื่อไม่ให้ไฟล์เก่าปน
-WORK_FOLDERS = ["output", "input_tile", "mask_tile", "mask_tile_raw"]
+# ไฟล์/โฟลเดอร์ที่แต่ละ step เป็นคนสร้าง ใช้ตอนล้างก่อน retry
+#
+# เอกสารเขียนไว้กว้าง ๆ ว่า "ล้างโฟลเดอร์ก่อน retry ยกเว้น input" ซึ่งใช้ได้เมื่อ
+# retry ทั้ง pipeline แต่ที่นี่ retry ทีละ step การล้างแบบเหมารวมจะลบผลงานของ
+# step ก่อนหน้าไปด้วย เช่น parse_result retry แล้วลบ output/ ที่ run_inference
+# สร้างไว้ ทำให้ retry ไม่มีทางสำเร็จ จึงล้างเฉพาะของที่ step นั้นผลิตเอง
+STEP_OUTPUTS = {
+    # generating_config เขียนทับไฟล์ .toml อยู่แล้ว ไม่ต้องล้างอะไร
+    "generating_config": [],
+    "fetch_image": ["input"],
+    "run_inference": ["output", "input_tile", "mask_tile", "mask_tile_raw"],
+    "parse_result": [
+        "result.geojson", "summary.json",
+        "overlay.png", "overlay.pgw", "overlay.json",
+    ],
+}
 
 
 # -------------------------------------------------------------
@@ -78,26 +92,19 @@ def overlay_meta_path(tid: str) -> str:
   return os.path.join(task_dir(tid), "overlay.json")
 
 
-def clean_work_dirs(tid: str, keep_input: bool = True) -> None:
-  """ล้างผลลัพธ์ก่อน retry
+def clean_step_outputs(tid: str, step_name: str) -> None:
+  """ล้างสิ่งที่ step นี้สร้างไว้ ก่อนเริ่ม retry ใหม่
 
-  ปกติเก็บ input ไว้ตามเอกสาร แต่ถ้า step ที่ล้มเหลวคือ fetch_image เอง
-  ต้องล้าง input ด้วย มิฉะนั้นไฟล์ภาพที่ดาวน์โหลดค้างไว้ไม่ครบจะตกค้าง
+  ไม่แตะผลงานของ step ก่อนหน้า (ดูเหตุผลที่คอมเมนต์ของ STEP_OUTPUTS)
   """
-  for folder in WORK_FOLDERS:
-    path = os.path.join(task_dir(tid), folder)
-    if os.path.exists(path):
+  for name in STEP_OUTPUTS.get(step_name, []):
+    path = os.path.join(task_dir(tid), name)
+    if not os.path.exists(path):
+      continue
+    if os.path.isdir(path):
       shutil.rmtree(path, ignore_errors=True)
-
-  if not keep_input:
-    path = input_dir(tid)
-    if os.path.exists(path):
-      shutil.rmtree(path, ignore_errors=True)
-
-  for stale in (geojson_path(tid), overlay_path(tid), overlay_meta_path(tid),
-                os.path.join(task_dir(tid), "overlay.pgw")):
-    if os.path.exists(stale):
-      os.remove(stale)
+    else:
+      os.remove(path)
 
 
 # -------------------------------------------------------------
@@ -223,7 +230,7 @@ def mark_step_retrying(
       error_msg=error_msg,
       retry_count=retry_count,
   )
-  clean_work_dirs(tid, keep_input=(step_name != STEP_FETCH_IMAGE))
+  clean_step_outputs(tid, step_name)
 
 
 def mark_step_failed(

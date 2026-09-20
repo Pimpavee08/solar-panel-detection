@@ -1,0 +1,14 @@
+# ไลบรารีที่ task ใน Airflow DAG ต้องใช้เท่านั้น
+#
+# ห้ามใส่ sqlalchemy / fastapi / uvicorn ที่นี่:
+# Airflow 2.10 ผูกกับ SQLAlchemy 1.4.x ถ้าติดตั้ง requirements.txt ทั้งไฟล์
+# pip จะอัปเกรดเป็น 2.x ทับ แล้ว ORM ของ Airflow จะพังทั้งระบบ
+# (อาการคือ auth manager โหลดไม่ขึ้น และคำสั่ง airflow users หายไป)
+#
+# Airflow มี SQLAlchemy, requests และ psycopg2 ติดมาให้อยู่แล้ว
+mercantile>=1.2.1
+Pillow>=10.0.0
+rasterio>=1.3.8
+geopandas>=0.14.0
+shapely>=2.0.0
+pyproj>=3.6.0

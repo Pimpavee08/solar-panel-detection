@@ -35,8 +35,21 @@ Airflow เป็นคนจัดการ retry ไม่ใช่โค้�
 | ล้มเหลวจนครบ 5 ครั้ง | `status = failed`, `error_msg` |
 | สำเร็จ | `status = completed`, `completed_at` |
 
-การล้างโฟลเดอร์ก่อน retry เก็บ `input/` ไว้ตามเอกสาร **ยกเว้น** ตอนที่ step ที่ล้มเหลว
-คือ `fetch_image` เอง เพราะไฟล์ภาพที่ดาวน์โหลดค้างไว้ไม่ครบต้องถูกทิ้ง
+### การล้างโฟลเดอร์ก่อน retry
+
+เอกสารเขียนไว้ว่า "ล้างโฟลเดอร์ก่อนเริ่ม retry (ยกเว้น input folder)" ซึ่งถูกต้องเมื่อ
+retry ทั้ง pipeline แต่ที่นี่ Airflow retry **ทีละ step** การล้างแบบเหมารวมจะลบผลงาน
+ของ step ก่อนหน้าไปด้วย เจอจริงตอนทดสอบ: `parse_result` ล้มเหลวแล้วล้าง `output/`
+ที่ `run_inference` สร้างไว้ ทำให้ retry อีก 4 ครั้งก็เจอ `No shapefile found` เหมือนเดิม
+
+จึงเปลี่ยนเป็นล้างเฉพาะสิ่งที่ step นั้นผลิตเอง (`STEP_OUTPUTS` ใน `pipeline.py`):
+
+| step | ล้างอะไร |
+|---|---|
+| `generating_config` | ไม่ต้องล้าง (เขียนทับไฟล์ `.toml` อยู่แล้ว) |
+| `fetch_image` | `input/` |
+| `run_inference` | `output/`, `input_tile/`, `mask_tile/`, `mask_tile_raw/` |
+| `parse_result` | `result.geojson`, `summary.json`, `overlay.*` |
 
 ## วิธีเปิดใช้งาน
 
@@ -109,3 +122,24 @@ curl http://localhost:8008/health
   เห็นทันที แต่ถ้าแก้ `requirements.txt` ต้อง `docker compose build` ใหม่
 - `run.sh` ของโมเดลจริงยังไม่ได้อยู่ในโปรเจกต์นี้ ตอนนี้ `run_inference` จึงถอยไปใช้
   `mock_model.py` แทนโดยอัตโนมัติ
+
+## บทเรียนจากการติดตั้งจริง
+
+สามข้อนี้แก้ไปแล้วในโปรเจกต์ แต่บันทึกไว้กันพลาดซ้ำตอนอัปเกรดเวอร์ชัน
+
+**1. ห้ามติดตั้ง `requirements.txt` ทั้งไฟล์ลงใน image ของ Airflow**
+ไฟล์นั้นมี `SQLAlchemy` ที่ pip จะอัปเกรดเป็น 2.x ทับ แต่ Airflow 2.10 ผูกกับ 1.4.x
+ผลคือ ORM ของ Airflow พังเงียบ ๆ — อาการที่เห็นคือ `airflow users create` ตอบว่า
+`invalid choice: 'users'` เพราะ auth manager โหลดไม่ขึ้น จึงแยกเป็น
+`requirements-airflow.txt` ที่มีเฉพาะไลบรารีภูมิสารสนเทศ และติดตั้งคู่กับ
+constraints ของ Airflow เสมอ
+
+**2. `DAGS_FOLDER` ต้องเป็นโฟลเดอร์เฉพาะ ไม่ใช่ root ของโปรเจกต์**
+Airflow จะ import ทุกไฟล์ `.py` ในโฟลเดอร์นั้นเพื่อค้นหา DAG ถ้าชี้ที่ root มันจะ
+ไป import `app.py` และไฟล์เทสต์ที่ mock แพ็กเกจ `airflow` ไว้ จึงใช้ `dags/solar_dag.py`
+เป็นตัวชี้ไปยัง DAG จริงแทน
+
+**3. `subprocess.run(list, shell=True)` ใช้ไม่ได้บน Linux**
+บน Windows Python จะรวม list ให้เอง แต่บน POSIX จะรันแค่สมาชิกตัวแรกแล้วคืน exit 0
+ทำให้ `run_inference` รายงานว่าสำเร็จทั้งที่ไม่ได้เรียกโมเดลเลย — ตัดคำสั่ง
+`shell=True` ออกแล้ว

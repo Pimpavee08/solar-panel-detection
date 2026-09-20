@@ -112,6 +112,9 @@ with DAG(
     start_date=datetime(2026, 1, 1),
     schedule=None,  # ไม่ตั้งเวลา รอรับ trigger จากหน้าเว็บอย่างเดียว
     catchup=False,
+    # DAG นี้รอ trigger จากหน้าเว็บอย่างเดียว ถ้าปล่อยให้ paused
+    # งานที่สั่งมาจะค้างไม่ทำงาน จึงให้ active ตั้งแต่สร้าง
+    is_paused_upon_creation=False,
     max_active_runs=4,
     tags=["solar", "geospatial", "ai"],
 ) as dag:

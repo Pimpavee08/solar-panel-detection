@@ -118,31 +118,42 @@ class TestDagCallbacks(unittest.TestCase):
           STATUS_RUNNING,
       )
 
-  def test_on_retry_records_attempt_and_cleans_output(self):
+  def test_on_retry_records_attempt_and_cleans_own_output(self):
+    step_name = "run_inference"
     context = _context(
-        self.tid, STEP_RUN := "run_inference", try_number=2,
-        exception=RuntimeError("โมเดลล้ม"),
+        self.tid, step_name, try_number=2, exception=RuntimeError("โมเดลล้ม")
     )
-    with patch.object(pipeline, "clean_work_dirs") as cleaner:
+    with patch.object(pipeline, "clean_step_outputs") as cleaner:
       dag_module.on_retry(context)
 
-    cleaner.assert_called_once_with(self.tid, keep_input=True)
+    cleaner.assert_called_once_with(self.tid, step_name)
 
     with session_scope() as session:
-      step = _step(session, self.tid, STEP_RUN)
+      step = _step(session, self.tid, step_name)
       self.assertEqual(step.status, STATUS_RUNNING)
       self.assertEqual(step.retry_count, 2)
       self.assertIn("โมเดลล้ม", step.error_msg)
 
-  def test_on_retry_of_fetch_image_also_clears_input(self):
-    """ภาพที่ดาวน์โหลดค้างไว้ไม่ครบต้องถูกลบ ไม่งั้นรอบถัดไปจะใช้ไฟล์เสีย"""
-    context = _context(
-        self.tid, STEP_FETCH_IMAGE, try_number=1, exception=OSError("เน็ตหลุด")
-    )
-    with patch.object(pipeline, "clean_work_dirs") as cleaner:
-      dag_module.on_retry(context)
+  def test_retry_clears_only_what_the_step_produced(self):
+    """retry parse_result ต้องไม่ลบ output/ ของ run_inference ไม่งั้นจะกู้ไม่ได้เลย"""
+    self.assertEqual(pipeline.STEP_OUTPUTS[STEP_FETCH_IMAGE], ["input"])
+    self.assertNotIn("output", pipeline.STEP_OUTPUTS["parse_result"])
+    self.assertNotIn("input", pipeline.STEP_OUTPUTS["run_inference"])
 
-    cleaner.assert_called_once_with(self.tid, keep_input=False)
+  def test_clean_step_outputs_keeps_earlier_artifacts(self):
+    import os
+
+    task_dir = pipeline.task_dir(self.tid)
+    os.makedirs(os.path.join(task_dir, "output"), exist_ok=True)
+    shapefile = os.path.join(task_dir, "output", "result.shp")
+    open(shapefile, "w").close()
+    geojson = pipeline.geojson_path(self.tid)
+    open(geojson, "w").close()
+
+    pipeline.clean_step_outputs(self.tid, "parse_result")
+
+    self.assertTrue(os.path.exists(shapefile), "shapefile ของ step ก่อนต้องอยู่ครบ")
+    self.assertFalse(os.path.exists(geojson), "ผลลัพธ์ของ step ที่ retry ต้องถูกล้าง")
 
   def test_on_failure_marks_step_failed(self):
     context = _context(

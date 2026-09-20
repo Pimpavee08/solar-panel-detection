@@ -6,6 +6,16 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "uvicorn", "app:app", "--port", "8008"],
       "port": 8008
+    },
+    {
+      "name": "solar-api-airflow",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "app:app", "--port", "8009"],
+      "port": 8009,
+      "env": {
+        "SOLAR_DATABASE_URL": "postgresql+psycopg2://airflow:airflow@localhost:5432/solar",
+        "SOLAR_AIRFLOW_URL": "http://localhost:8080"
+      }
     }
   ]
 }

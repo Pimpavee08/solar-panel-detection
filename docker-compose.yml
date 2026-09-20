@@ -18,9 +18,10 @@ x-airflow-common: &airflow-common
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__CORE__DAGS_FOLDER: /opt/project
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/project/dags
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+    # session = ให้หน้า UI ใช้ได้, basic_auth = ให้ FastAPI สั่ง trigger ผ่าน REST ได้
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth"
     # ให้ DAG import pipeline.py / models.py ของโปรเจกต์ได้
     PYTHONPATH: /opt/project
     # ฐานข้อมูลและโฟลเดอร์ข้อมูลของโปรเจกต์ ต้องตรงกับที่ฝั่งเว็บใช้
@@ -64,6 +65,9 @@ services:
           --username airflow --password airflow \
           --firstname Solar --lastname Team \
           --role Admin --email solar@example.com || true
+        # สร้างตาราง Task / Task_Step / Task_Result ใน database solar
+        # เผื่อกรณีที่ DAG ถูกสั่งรันก่อนที่ฝั่งเว็บจะเคยสตาร์ต
+        python -c 'from db import init_db; init_db()'
     restart: on-failure
 
   airflow-webserver:

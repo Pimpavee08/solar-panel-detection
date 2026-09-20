@@ -96,7 +96,9 @@ def run_inference(job_name: str, base_dir: str = "data/inference") -> str:
     cmd = [sys.executable, MOCK_MODEL, "--config", config_path]
 
   print(f"Executing: {' '.join(cmd)}")
-  process = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+  # ห้ามใส่ shell=True คู่กับ list: บน POSIX จะรันแค่สมาชิกตัวแรกแล้วคืน exit 0
+  # ทำให้ดูเหมือนโมเดลรันผ่านทั้งที่ไม่ได้ทำอะไรเลย
+  process = subprocess.run(cmd, capture_output=True, text=True)
 
   if process.returncode != 0:
     raise RuntimeError(f"Model execution failed: {process.stderr.strip()}")

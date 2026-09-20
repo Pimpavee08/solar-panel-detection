@@ -10,7 +10,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 USER airflow
-COPY requirements.txt /tmp/solar-requirements.txt
-# psycopg2-binary ใช้ต่อ Postgres ที่เป็นทั้ง metadata DB ของ Airflow
-# และฐานข้อมูลของโปรเจกต์
-RUN pip install --no-cache-dir -r /tmp/solar-requirements.txt psycopg2-binary
+ARG AIRFLOW_VERSION=2.10.5
+ARG PYTHON_VERSION=3.12
+
+COPY requirements-airflow.txt /tmp/requirements-airflow.txt
+# ติดตั้งโดยผูกกับ constraints ของ Airflow เวอร์ชันนี้ เพื่อกันไม่ให้ dependency
+# ของ Airflow (โดยเฉพาะ SQLAlchemy 1.4) ถูกอัปเกรดทับจนระบบพัง
+RUN pip install --no-cache-dir -r /tmp/requirements-airflow.txt     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
