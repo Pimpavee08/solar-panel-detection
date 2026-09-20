@@ -67,6 +67,7 @@ def print_report(tid: str) -> None:
     print(f" - ประมาณการจำนวนแผง:   {result.panel_count:,} แผง")
     print(f" - ไฟฟ้าที่ผลิตได้ต่อปี:  {result.power_generation:,.2f} kWh/ปี")
     print(f" - GeoJSON:             {pipeline.geojson_path(tid)}")
+    print(f" - ภาพ overlay:          {result.overlay_image_path or '(ไม่ได้สร้าง)'}")
     print("=" * 56)
 
 

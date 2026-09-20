@@ -284,6 +284,11 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
       <label class="lrow"><input type="checkbox" id="l_aoi" checked onchange="syncLayers()"><span>กรอบพื้นที่ (AOI)</span></label>
       <label style="margin-top:8px">ความทึบของชั้นแผง <b id="op_val" style="color:var(--text)">65%</b></label>
       <input type="range" id="l_op" min="0" max="100" value="65" oninput="syncLayers()">
+
+      <h4>ภาพผลการตรวจจับ</h4>
+      <label class="lrow"><input type="checkbox" id="l_ovl" onchange="syncLayers()"><span>ซ้อนภาพ overlay</span></label>
+      <label style="margin-top:8px">ความทึบของภาพ <b id="ovl_val" style="color:var(--text)">100%</b></label>
+      <input type="range" id="l_ovl_op" min="0" max="100" value="100" oninput="syncLayers()">
     </div>
 
     <div class="float drawer" id="drawer">
@@ -338,10 +343,11 @@ const BASES = {
 let baseLayer = BASES.sat.addTo(map);
 function setBase(k){ map.removeLayer(baseLayer); baseLayer = BASES[k].addTo(map); }
 
+const ovlLayer  = L.layerGroup().addTo(map);   // ภาพ overlay (อยู่ล่างสุด)
 const aoiLayer  = L.layerGroup().addTo(map);   // กรอบพื้นที่
 const detLayer  = L.layerGroup().addTo(map);   // ผลการตรวจจับ
 const measLayer = L.layerGroup().addTo(map);   // เส้นวัดระยะ
-let aoiRect = null, detGeo = null;
+let aoiRect = null, detGeo = null, ovlImage = null;
 
 /* ---------- utilities ---------- */
 const $ = id => document.getElementById(id);
@@ -511,6 +517,10 @@ function syncLayers(){
   aoiLayer.eachLayer(l => l.setStyle({opacity: showAoi?1:0, fillOpacity: showAoi?.06:0}));
   const showDet = $('l_det').checked;
   if(detGeo) detGeo.setStyle({opacity: showDet?1:0, fillOpacity: showDet?op:0});
+
+  const ovlOp = +$('l_ovl_op').value / 100;
+  $('ovl_val').textContent = $('l_ovl_op').value + '%';
+  if(ovlImage) ovlImage.setOpacity($('l_ovl').checked ? ovlOp : 0);
 }
 
 /* =========================================================
@@ -618,6 +628,7 @@ function renderTasks(){
       '<div class="job-acts" onclick="event.stopPropagation()">' +
         '<a class="icon-btn" href="/tasks/' + t.tid + '/geojson">GeoJSON</a>' +
         '<a class="icon-btn" href="/tasks/' + t.tid + '/satellite">ภาพ TIF</a>' +
+        '<a class="icon-btn" href="/tasks/' + t.tid + '/overlay">Overlay</a>' +
         '<button class="icon-btn" onclick="reuseAOI(\'' + t.tid + '\')">ใช้พื้นที่นี้</button>' +
         '<button class="icon-btn danger" onclick="removeTask(\'' + t.tid + '\')">ลบ</button>' +
       '</div>' +
@@ -671,6 +682,8 @@ async function openTask(tid){
 
   if(task.state === 'running'){ switchTab('new'); trackProgress(tid, task.title); }
 
+  await loadOverlay(tid);
+
   detLayer.clearLayers(); detGeo = null; S.geojson = null;
   try{
     const res = await fetch('/tasks/' + tid + '/geojson');
@@ -678,6 +691,19 @@ async function openTask(tid){
     S.geojson = await res.json();
     renderDetections(S.geojson);
   }catch(e){ closeDrawer(); }
+}
+
+async function loadOverlay(tid){
+  ovlLayer.clearLayers(); ovlImage = null;
+  $('l_ovl').disabled = true;
+  try{
+    const res = await fetch('/tasks/' + tid + '/overlay/meta');
+    if(!res.ok) return;                      // Task นี้ยังไม่มีภาพ overlay
+    const meta = await res.json();
+    ovlImage = L.imageOverlay('/tasks/' + tid + '/overlay', meta.bounds).addTo(ovlLayer);
+    $('l_ovl').disabled = false;
+    syncLayers();
+  }catch(e){}
 }
 
 function renderDetections(gj){
@@ -743,6 +769,7 @@ function fitResult(){
 function closeDrawer(){ $('drawer').classList.remove('on'); }
 function clearResult(){
   detLayer.clearLayers(); detGeo = null; S.geojson = null; closeDrawer();
+  ovlLayer.clearLayers(); ovlImage = null; $('l_ovl').disabled = true;
   $('pill_job').textContent = 'ยังไม่ได้เลือกงาน';
   ['v_area','v_panels','v_cap','v_energy'].forEach(id => { $(id).innerHTML = '—'; });
 }

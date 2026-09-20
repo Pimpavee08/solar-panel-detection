@@ -5,6 +5,7 @@
 อ่านค่านี้ตอน import เพื่อสร้าง engine
 """
 
+import json
 import os
 import shutil
 import tempfile
@@ -18,6 +19,7 @@ os.environ["SOLAR_DATABASE_URL"] = "sqlite:///" + os.path.join(
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+import overlay  # noqa: E402
 import pipeline  # noqa: E402
 from app import app  # noqa: E402
 from db import session_scope  # noqa: E402
@@ -153,6 +155,10 @@ class TestSolarAPI(unittest.TestCase):
     tid = self.client.post("/tasks", json=VALID_PAYLOAD).json()["tid"]
     self.assertEqual(self.client.get(f"/tasks/{tid}/geojson").status_code, 404)
     self.assertEqual(self.client.get(f"/tasks/{tid}/satellite").status_code, 404)
+    self.assertEqual(self.client.get(f"/tasks/{tid}/overlay").status_code, 404)
+    self.assertEqual(
+        self.client.get(f"/tasks/{tid}/overlay/meta").status_code, 404
+    )
 
 
 class TestPipelineSteps(unittest.TestCase):
@@ -241,6 +247,89 @@ class TestPipelineSteps(unittest.TestCase):
       self.assertEqual(step.retry_count, 2)
       self.assertIsNotNone(step.started_at)
       self.assertIsNotNone(step.completed_at)
+
+
+class TestOverlay(unittest.TestCase):
+  """เทสต์ overlay.py ด้วยภาพจำลอง จึงไม่ต้องดาวน์โหลดภาพจริง"""
+
+  BBOX = (100.602, 14.070, 100.607, 14.074)  # west, south, east, north
+
+  def setUp(self):
+    self.dir = tempfile.mkdtemp(prefix="solar_overlay_")
+    self.tif = os.path.join(self.dir, "satellite.tif")
+    self.geojson = os.path.join(self.dir, "result.geojson")
+    self.png = os.path.join(self.dir, "overlay.png")
+    self._write_raster()
+
+  def tearDown(self):
+    shutil.rmtree(self.dir, ignore_errors=True)
+
+  def _write_raster(self):
+    """ภาพ 3 แบนด์สีเทาล้วน ใน EPSG:3857 ครอบ bbox ที่กำหนด"""
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_bounds
+    from rasterio.warp import transform_bounds
+
+    west, south, east, north = transform_bounds(
+        "EPSG:4326", "EPSG:3857", *self.BBOX
+    )
+    size = 100
+    with rasterio.open(
+        self.tif, "w", driver="GTiff", width=size, height=size, count=3,
+        dtype="uint8", crs="EPSG:3857",
+        transform=from_bounds(west, south, east, north, size, size),
+    ) as dst:
+      band = np.full((size, size), 128, dtype="uint8")
+      for i in range(3):
+        dst.write(band, i + 1)
+
+  def _write_geojson(self, features):
+    with open(self.geojson, "w", encoding="utf-8") as f:
+      json.dump({"type": "FeatureCollection", "features": features}, f)
+
+  @staticmethod
+  def _square(west, south, east, north):
+    ring = [[west, south], [east, south], [east, north], [west, north],
+            [west, south]]
+    return {"type": "Feature", "properties": {},
+            "geometry": {"type": "Polygon", "coordinates": [ring]}}
+
+  def test_draws_polygon_and_writes_sidecars(self):
+    from PIL import Image
+
+    self._write_geojson([self._square(100.6035, 14.0715, 100.6050, 14.0730)])
+    meta = overlay.create_overlay(self.tif, self.geojson, self.png)
+
+    self.assertEqual(meta["polygon_count"], 1)
+    self.assertTrue(os.path.exists(self.png))
+    self.assertTrue(os.path.exists(os.path.join(self.dir, "overlay.pgw")))
+    self.assertTrue(os.path.exists(os.path.join(self.dir, "overlay.json")))
+
+    # ขอบเขตที่คืนมาต้องอยู่ในรูปแบบของ Leaflet: [[south, west], [north, east]]
+    (south, west), (north, east) = meta["bounds"]
+    self.assertLess(south, north)
+    self.assertLess(west, east)
+    self.assertAlmostEqual(west, self.BBOX[0], places=4)
+    self.assertAlmostEqual(north, self.BBOX[3], places=4)
+
+    # พื้นหลังสีเทา 128 ล้วน ดังนั้นต้องมีพิกเซลที่เปลี่ยนไปจากการวาดทับ
+    colors = {c for _, c in Image.open(self.png).getcolors(maxcolors=100000)}
+    self.assertGreater(len(colors), 1)
+
+  def test_handles_empty_detection(self):
+    """ตรวจไม่พบแผงเลย ก็ยังต้องได้ภาพออกมา ไม่ใช่ error"""
+    self._write_geojson([])
+    meta = overlay.create_overlay(self.tif, self.geojson, self.png)
+    self.assertEqual(meta["polygon_count"], 0)
+    self.assertTrue(os.path.exists(self.png))
+
+  def test_missing_raster_raises(self):
+    self._write_geojson([])
+    with self.assertRaises(FileNotFoundError):
+      overlay.create_overlay(
+          os.path.join(self.dir, "nope.tif"), self.geojson, self.png
+      )
 
 
 if __name__ == "__main__":

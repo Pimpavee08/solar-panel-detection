@@ -21,6 +21,7 @@ import traceback
 from data_retrieval import download_satellite_image
 from db import session_scope
 from model_runner import generate_config, run_inference
+from overlay import create_overlay
 from models import (
     MAX_RETRY,
     STATUS_COMPLETED,
@@ -68,6 +69,14 @@ def satellite_path(tid: str) -> str:
   return os.path.join(input_dir(tid), "satellite.tif")
 
 
+def overlay_path(tid: str) -> str:
+  return os.path.join(task_dir(tid), "overlay.png")
+
+
+def overlay_meta_path(tid: str) -> str:
+  return os.path.join(task_dir(tid), "overlay.json")
+
+
 def clean_work_dirs(tid: str, keep_input: bool = True) -> None:
   """ล้างผลลัพธ์ก่อน retry
 
@@ -84,9 +93,10 @@ def clean_work_dirs(tid: str, keep_input: bool = True) -> None:
     if os.path.exists(path):
       shutil.rmtree(path, ignore_errors=True)
 
-  result = geojson_path(tid)
-  if os.path.exists(result):
-    os.remove(result)
+  for stale in (geojson_path(tid), overlay_path(tid), overlay_meta_path(tid),
+                os.path.join(task_dir(tid), "overlay.pgw")):
+    if os.path.exists(stale):
+      os.remove(stale)
 
 
 # -------------------------------------------------------------
@@ -169,7 +179,7 @@ def _update_step(
       task.updated_at = datetime.now()
 
 
-def _save_result(tid: str, summary: dict) -> None:
+def _save_result(tid: str, summary: dict, overlay: str | None) -> None:
   """เขียน Task_Result — ทำเฉพาะตอน parse_result สำเร็จเท่านั้น (ตามเอกสารข้อ 6)"""
   with session_scope() as session:
     result = session.query(TaskResult).filter_by(tid=tid).one_or_none()
@@ -181,8 +191,7 @@ def _save_result(tid: str, summary: dict) -> None:
     result.power_generation = summary.get("total_annual_generation_kwh", 0.0)
     result.panel_count = summary.get("total_panels", 0)
     result.shapefile_path = summary.get("shapefile_path")
-    # overlay_image_path จะเติมในเฟสถัดไป (ยังไม่ได้สร้างภาพ overlay)
-    result.overlay_image_path = None
+    result.overlay_image_path = overlay
     result.created_at = datetime.now()
 
 
@@ -218,7 +227,17 @@ def _step_parse_result(tid: str, task: dict) -> None:
   )
   if summary.get("status") != "completed":
     raise RuntimeError(summary.get("message", "แปลงผลลัพธ์ไม่สำเร็จ"))
-  _save_result(tid, summary)
+
+  # ภาพ overlay เป็นส่วนแสดงผล ไม่ใช่ตัวเลขผลลัพธ์ ถ้าวาดไม่สำเร็จจึงไม่ควร
+  # ทำให้ทั้ง Task ล้มเหลวแล้ว retry ใหม่ทั้งชุด — บันทึกเป็น None แล้วไปต่อ
+  overlay = None
+  try:
+    create_overlay(satellite_path(tid), geojson_path(tid), overlay_path(tid))
+    overlay = overlay_path(tid)
+  except Exception as exc:  # noqa: BLE001
+    print(f"[pipeline] สร้างภาพ overlay ไม่สำเร็จ: {type(exc).__name__}: {exc}")
+
+  _save_result(tid, summary, overlay)
 
 
 STEP_FUNCTIONS = {

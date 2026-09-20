@@ -5,6 +5,7 @@
 """
 
 from datetime import datetime
+import json
 import os
 from typing import List, Optional
 
@@ -287,6 +288,45 @@ def download_geojson(tid: str):
       media_type="application/geo+json",
       filename=f"{tid}-result.geojson",
   )
+
+
+@app.get("/tasks/{tid}/overlay", tags=["Downloads"])
+def download_overlay(tid: str):
+  """ภาพถ่ายดาวเทียมที่วาดขอบเขตแผงที่ตรวจพบทับไว้แล้ว"""
+  with session_scope() as session:
+    get_task_or_404(session, tid)
+
+  path = pipeline.overlay_path(tid)
+  if not os.path.exists(path):
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="ยังไม่มีภาพ overlay ของ Task นี้",
+    )
+  return FileResponse(
+      path=path, media_type="image/png", filename=f"{tid}-overlay.png"
+  )
+
+
+@app.get("/tasks/{tid}/overlay/meta", tags=["Downloads"])
+def overlay_meta(tid: str):
+  """ขอบเขตของภาพ overlay ในพิกัด WGS84 สำหรับวางเป็น image layer บนแผนที่
+
+  ขอบเขตนี้กว้างกว่า bbox ที่ผู้ใช้เลือกเล็กน้อย เพราะภาพถูกต่อจาก tile
+  ที่ปัดขอบออกไป จึงใช้ค่าจากไฟล์ภาพจริง ไม่ใช่ค่าใน Task
+  """
+  with session_scope() as session:
+    get_task_or_404(session, tid)
+
+  path = pipeline.overlay_meta_path(tid)
+  if not os.path.exists(path):
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="ยังไม่มีภาพ overlay ของ Task นี้",
+    )
+  with open(path, encoding="utf-8") as f:
+    meta = json.load(f)
+  return {"tid": tid, "bounds": meta["bounds"],
+          "polygon_count": meta.get("polygon_count", 0)}
 
 
 @app.get("/tasks/{tid}/satellite", tags=["Downloads"])
