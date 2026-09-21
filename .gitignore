@@ -7,4 +7,7 @@ __pycache__/
 
 # Generated job data
 data/solar_jobs.db
+# SQLite สร้างสองไฟล์นี้เพิ่มเมื่อเปิดโหมด WAL (ดู db.py)
+data/solar_jobs.db-wal
+data/solar_jobs.db-shm
 data/inference/
