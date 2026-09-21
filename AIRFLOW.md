@@ -85,6 +85,15 @@ python -m uvicorn app:app --reload --port 8008
 
 ต้องติดตั้ง `psycopg2-binary` ในเครื่องด้วย (`pip install psycopg2-binary`)
 
+ครั้งแรกต้องสร้างผู้ใช้ก่อน ไม่งั้นล็อกอินไม่ได้ (หรือกด "สมัครสมาชิก" บนหน้าเว็บ):
+
+```bash
+python manage_users.py create --name "ชื่อ" --email a@b.c
+```
+
+Task ที่สร้างไว้ก่อนมีระบบล็อกอินจะไม่มีเจ้าของ โอนได้ด้วย
+`python manage_users.py adopt-orphans --email a@b.c` — ดูรายละเอียดใน [AUTH.md](AUTH.md)
+
 ### 3. ตรวจว่าต่อติดแล้ว
 
 ```bash
@@ -112,6 +121,7 @@ curl http://localhost:8008/health
 | `SOLAR_AIRFLOW_PASSWORD` | `airflow` | รหัสผ่านสำหรับ REST API |
 | `SOLAR_AIRFLOW_DAG_ID` | `solar_panel_detection_pipeline` | ชื่อ DAG |
 | `SOLAR_AIRFLOW_API` | `v1` | `v1` สำหรับ Airflow 2.x, `v2` สำหรับ 3.x |
+| `SOLAR_SECRET_KEY` | *(สุ่ม)* | คีย์เซ็น session cookie — ดู [AUTH.md](AUTH.md) |
 
 ## ข้อควรระวัง
 

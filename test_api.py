@@ -10,6 +10,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 # ปกติ conftest.py ตั้งค่านี้ให้แล้ว บรรทัดนี้เผื่อกรณีรันไฟล์นี้ตรง ๆ
@@ -26,6 +27,7 @@ import pipeline  # noqa: E402
 from app import app  # noqa: E402
 from db import session_scope  # noqa: E402
 from models import (  # noqa: E402
+    User,
     MAX_RETRY,
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -48,17 +50,29 @@ VALID_PAYLOAD = {
 
 
 def _clear_tasks():
-  """ลบ Task ทั้งหมดที่เทสต์สร้างไว้ พร้อมโฟลเดอร์บนดิสก์"""
+  """ลบ Task และผู้ใช้ทั้งหมดที่เทสต์สร้างไว้ พร้อมโฟลเดอร์บนดิสก์"""
   with session_scope() as session:
     for task in session.query(Task).all():
       pipeline.delete_task_files(task.tid)
       session.delete(task)
+    for user in session.query(User).all():
+      session.delete(user)
 
 
 class TestSolarAPI(unittest.TestCase):
-  @classmethod
-  def setUpClass(cls):
-    cls.client = TestClient(app)
+  def setUp(self):
+    # ทุก endpoint ของ /tasks ต้องล็อกอินก่อน (ดู test_auth.py)
+    # TestClient เก็บ session cookie ให้เอง
+    self.client = TestClient(app)
+    response = self.client.post(
+        "/auth/register",
+        json={
+            "name": "ผู้ใช้ทดสอบ",
+            "email": f"api-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "test-password-1",
+        },
+    )
+    self.assertEqual(response.status_code, 200, response.text)
 
   def tearDown(self):
     _clear_tasks()

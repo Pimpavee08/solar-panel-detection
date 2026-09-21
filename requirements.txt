@@ -11,3 +11,8 @@ uvicorn>=0.22.0
 httpx>=0.24.0
 # 1.4 ด้วย เพราะ Airflow 2.10 ผูกกับ 1.4.x — โค้ดใน models.py/db.py รองรับทั้งสองเวอร์ชัน
 SQLAlchemy>=1.4.49
+
+# ระบบยืนยันตัวตน
+bcrypt>=3.2.0
+itsdangerous>=2.1.0
+email-validator>=2.0.0

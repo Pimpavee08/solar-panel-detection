@@ -60,7 +60,7 @@ aside{background:var(--panel);border-right:1px solid var(--line);display:flex;fl
 .step-h h3{font-size:13px;font-weight:600}
 .hint{font-size:11.5px;color:var(--muted-2);line-height:1.6;margin-bottom:8px}
 label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px}
-input[type=text],input[type=number],select{
+input[type=text],input[type=number],input[type=email],input[type=password],select{
   width:100%;padding:9px 10px;background:var(--bg);border:1px solid var(--line);
   border-radius:var(--r-sm);transition:.15s}
 input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(250,204,21,.12)}
@@ -172,6 +172,25 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
 .leaflet-popup-content b{color:var(--accent)}
 .leaflet-popup-close-button{color:var(--muted)!important}
 
+/* ---------- หน้าเข้าสู่ระบบ ---------- */
+#gate{position:fixed;inset:0;z-index:9000;background:var(--bg);
+  display:none;place-items:center;padding:24px}
+#gate.on{display:grid}
+.gate-card{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:26px}
+.gate-card .brand{margin-bottom:6px}
+.gate-sub{font-size:12px;color:var(--muted-2);margin-bottom:20px;line-height:1.6}
+.gate-card label{margin-top:12px}
+.gate-card .btn{margin-top:18px}
+.gate-switch{margin-top:14px;text-align:center;font-size:12px;color:var(--muted)}
+.gate-switch button{color:var(--accent);font-size:12px;text-decoration:underline}
+.gate-err{margin-top:12px;padding:9px 11px;border-radius:var(--r-sm);font-size:12px;
+  background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);
+  color:var(--err);display:none;line-height:1.5}
+.gate-err.on{display:block}
+.user-chip{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.user-chip b{color:var(--text)}
+
 /* toast */
 #toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;
   display:flex;flex-direction:column;gap:8px;align-items:center}
@@ -208,6 +227,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
   </div>
   <div class="spacer"></div>
   <div class="pill" id="pill_job">ยังไม่ได้เลือกงาน</div>
+  <div class="user-chip" id="user_chip"></div>
   <a class="hlink" href="/docs" target="_blank">Swagger UI &#8599;</a>
 </header>
 
@@ -309,6 +329,32 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
   </div>
 </main>
 
+<div id="gate">
+  <div class="gate-card">
+    <div class="brand"><div class="dot"></div><div>Solar Detection Console</div></div>
+    <p class="gate-sub" id="gate_sub">เข้าสู่ระบบเพื่อดูและสร้างงานตรวจจับของคุณ</p>
+
+    <form id="gate_form" onsubmit="return false">
+      <div id="gate_name_row" style="display:none">
+        <label>ชื่อ</label>
+        <input type="text" id="gate_name" autocomplete="name" maxlength="120">
+      </div>
+      <label>อีเมล</label>
+      <input type="email" id="gate_email" autocomplete="email" required>
+      <label>รหัสผ่าน</label>
+      <input type="password" id="gate_password" autocomplete="current-password" required>
+
+      <div class="gate-err" id="gate_err"></div>
+      <button class="btn btn-primary" id="gate_submit" onclick="submitGate()">เข้าสู่ระบบ</button>
+    </form>
+
+    <div class="gate-switch">
+      <span id="gate_switch_text">ยังไม่มีบัญชี?</span>
+      <button onclick="toggleGateMode()" id="gate_switch_btn">สมัครสมาชิก</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -317,6 +363,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
    สถานะรวมของหน้าเว็บ
    ========================================================= */
 const S = {
+  user: null,
   tasks: [], currentTid: null, geojson: null,
   aoi: null,            // {min_lat,min_lng,max_lat,max_lng}
   mode: null,           // null | 'draw' | 'measure'
@@ -592,6 +639,7 @@ function renderStepper(p){
 async function loadTasks(){
   try{
     const res = await fetch('/tasks');
+    if(res.status === 401){ showGate(); return; }
     S.tasks = await res.json();
     $('task_count').textContent = '(' + S.tasks.length + ')';
     renderTasks();
@@ -800,8 +848,105 @@ function switchTab(k){
 }
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => switchTab(t.dataset.pane); });
 
-loadTasks();
-setInterval(() => { if(!S.pollTimer) loadTasks(); }, 8000);
+/* =========================================================
+   เข้าสู่ระบบ
+   ========================================================= */
+let gateMode = 'login';   // 'login' | 'register'
+
+function toggleGateMode(){
+  gateMode = gateMode === 'login' ? 'register' : 'login';
+  const reg = gateMode === 'register';
+  $('gate_name_row').style.display = reg ? '' : 'none';
+  $('gate_name').required = reg;
+  $('gate_sub').textContent = reg
+    ? 'สร้างบัญชีใหม่ งานที่คุณสร้างจะเห็นได้เฉพาะบัญชีนี้'
+    : 'เข้าสู่ระบบเพื่อดูและสร้างงานตรวจจับของคุณ';
+  $('gate_submit').textContent = reg ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ';
+  $('gate_switch_text').textContent = reg ? 'มีบัญชีอยู่แล้ว?' : 'ยังไม่มีบัญชี?';
+  $('gate_switch_btn').textContent = reg ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก';
+  $('gate_password').autocomplete = reg ? 'new-password' : 'current-password';
+  gateError('');
+}
+
+function gateError(msg){
+  const box = $('gate_err');
+  box.textContent = msg;
+  box.classList.toggle('on', !!msg);
+}
+
+async function submitGate(){
+  const email = $('gate_email').value.trim();
+  const password = $('gate_password').value;
+  const name = $('gate_name').value.trim();
+
+  if(!email || !password) return gateError('กรอกอีเมลและรหัสผ่านให้ครบ');
+  if(gateMode === 'register'){
+    if(!name) return gateError('กรอกชื่อด้วย');
+    if(password.length < 8) return gateError('รหัสผ่านต้องยาวอย่างน้อย 8 ตัว');
+  }
+
+  const body = gateMode === 'register' ? {name, email, password} : {email, password};
+  $('gate_submit').disabled = true;
+  try{
+    const res = await fetch('/auth/' + (gateMode === 'register' ? 'register' : 'login'), {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    });
+    const data = await res.json();
+    if(!res.ok){
+      // ข้อผิดพลาดจาก pydantic จะมาเป็น array ของ object
+      const detail = Array.isArray(data.detail)
+        ? (data.detail[0] && data.detail[0].msg) || 'ข้อมูลไม่ถูกต้อง'
+        : data.detail;
+      throw new Error(detail || 'เข้าสู่ระบบไม่สำเร็จ');
+    }
+    enterApp(data);
+  }catch(err){
+    gateError(err.message);
+  }finally{
+    $('gate_submit').disabled = false;
+  }
+}
+
+function enterApp(user){
+  S.user = user;
+  $('gate').classList.remove('on');
+  $('gate_password').value = '';
+  $('user_chip').innerHTML = '<b>' + esc(user.name) + '</b>' +
+    '<button class="hlink" style="padding:4px 8px" onclick="logout()">ออกจากระบบ</button>';
+  loadTasks();
+}
+
+function showGate(){
+  S.user = null;
+  clearInterval(S.pollTimer); S.pollTimer = null;
+  S.tasks = []; clearResult();
+  $('user_chip').innerHTML = '';
+  $('gate').classList.add('on');
+  $('gate_email').focus();
+}
+
+async function logout(){
+  try{ await fetch('/auth/logout', {method:'POST'}); }catch(e){}
+  showGate();
+}
+
+/* =========================================================
+   เริ่มต้น
+   ========================================================= */
+$('gate_form').addEventListener('keydown', e => {
+  if(e.key === 'Enter'){ e.preventDefault(); submitGate(); }
+});
+
+(async function start(){
+  try{
+    const res = await fetch('/auth/me');
+    if(res.ok) enterApp(await res.json());
+    else showGate();
+  }catch(e){ showGate(); }
+})();
+
+// รีเฟรชรายการงานเป็นระยะ เฉพาะตอนที่ล็อกอินอยู่และไม่ได้ติดตาม progress อยู่
+setInterval(() => { if(S.user && !S.pollTimer) loadTasks(); }, 8000);
 </script>
 </body>
 </html>
