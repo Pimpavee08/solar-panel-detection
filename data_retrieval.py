@@ -1,5 +1,7 @@
 import io
 import math
+import os
+import time
 import mercantile
 import numpy as np
 from PIL import Image
@@ -9,6 +11,41 @@ import requests
 
 GOOGLE_SAT_URL = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+TILE_RETRIES = int(os.environ.get("SOLAR_TILE_RETRIES", "3"))
+TILE_TIMEOUT = float(os.environ.get("SOLAR_TILE_TIMEOUT", "10"))
+TILE_BACKOFF = float(os.environ.get("SOLAR_TILE_BACKOFF", "0.5"))
+
+
+class TileDownloadError(RuntimeError):
+  """ดาวน์โหลด tile ไม่สำเร็จจนหมดโควต้าที่ลองใหม่"""
+
+
+def _fetch_tile(session, tile) -> bytes:
+  """ดึง tile หนึ่งแผ่น ลองใหม่ได้ TILE_RETRIES ครั้งก่อนยอมแพ้
+
+  ต้องโยน exception เมื่อล้มเหลวจริง ห้ามคืนค่าว่างเด็ดขาด ไม่งั้นบริเวณนั้น
+  บนภาพจะเหลือเป็นสีดำแล้วโมเดลจะตรวจไม่เจอแผงโดยที่ไม่มีใครรู้ว่าภาพขาด
+  """
+  url = GOOGLE_SAT_URL.format(x=tile.x, y=tile.y, z=tile.z)
+  problem = "ไม่ทราบสาเหตุ"
+
+  for attempt in range(TILE_RETRIES):
+    try:
+      resp = session.get(url, headers=HEADERS, timeout=TILE_TIMEOUT)
+      if resp.status_code == 200:
+        return resp.content
+      problem = f"HTTP {resp.status_code}"
+    except requests.RequestException as exc:
+      problem = f"{type(exc).__name__}: {exc}"
+
+    if attempt < TILE_RETRIES - 1:
+      time.sleep(TILE_BACKOFF * (2 ** attempt))
+
+  raise TileDownloadError(
+      f"ดึง tile z{tile.z}/{tile.x}/{tile.y} ไม่สำเร็จหลังลอง {TILE_RETRIES} ครั้ง"
+      f" ({problem})"
+  )
 
 
 def download_satellite_image(
@@ -48,16 +85,14 @@ def download_satellite_image(
   canvas = Image.new("RGB", (width, height))
 
   # 3. ดาวน์โหลดแต่ละ Tile และนำมาต่อลง Canvas
-  for tile in tiles:
-    url = GOOGLE_SAT_URL.format(x=tile.x, y=tile.y, z=tile.z)
-    resp = requests.get(url, headers=HEADERS, timeout=10)
-    if resp.status_code == 200:
-      tile_img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+  # ใช้ Session เดียวเพื่อใช้ connection ซ้ำ เร็วกว่าเปิดใหม่ทุก tile
+  with requests.Session() as session:
+    for tile in tiles:
+      content = _fetch_tile(session, tile)  # ล้มเหลวจริงจะโยน TileDownloadError
+      tile_img = Image.open(io.BytesIO(content)).convert("RGB")
       pos_x = (tile.x - min_x) * 256
       pos_y = (tile.y - min_y) * 256
       canvas.paste(tile_img, (pos_x, pos_y))
-    else:
-      print(f"Failed to fetch tile {tile.x}, {tile.y}, {tile.z}")
 
   # 4. คำนวณพิกัด Georeferencing (EPSG:3857)
   ul_bounds = mercantile.xy_bounds(min_x, min_y, zoom)

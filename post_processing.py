@@ -69,6 +69,8 @@ def process_shapefile_to_geojson(
   ).round().astype(int)
   gdf_utm["capacity_kwp"] = (gdf_utm["area_sqm"] * wp_per_m2 / 1000.0).round(2)
   gdf_utm["annual_generation_kwh"] = (
+      # 4.2 = ชั่วโมงแดดเต็มต่อวันโดยเฉลี่ยของไทย
+      # 0.75 = performance ratio (สัดส่วนที่ผลิตได้จริงหลังหักการสูญเสีย)
       gdf_utm["capacity_kwp"] * 4.2 * 365 * 0.75
   ).round(2)
 
