@@ -65,6 +65,7 @@ docker compose up -d --build
 
 ## เอกสารเพิ่มเติม
 
+- [DEVELOPMENT.md](DEVELOPMENT.md) — พัฒนาอะไรเพิ่มจากโค้ดตั้งต้นบ้าง และทำไม
 - [AIRFLOW.md](AIRFLOW.md) — ตั้ง Airflow, การ retry, ตัวแปรสภาพแวดล้อม
 - [AUTH.md](AUTH.md) — ระบบบัญชีผู้ใช้และการป้องกันที่ใส่ไว้
 
