@@ -11,3 +11,6 @@ data/solar_jobs.db
 data/solar_jobs.db-wal
 data/solar_jobs.db-shm
 data/inference/
+
+# เอกสารที่สร้างจากสคริปต์ — คู่มือการรันมีรหัสผ่านอยู่ภายใน ห้ามขึ้น repo ที่เป็น public
+*.pdf
