@@ -187,6 +187,33 @@ def _update_step(
       task.updated_at = datetime.now()
 
 
+def reset_task_steps(tid: str) -> None:
+  """ล้างสถานะทั้ง 4 step กลับเป็น pending เพื่อสั่งรันใหม่ตั้งแต่ต้น
+
+  ลบ Task_Result เดิมด้วย เพราะตัวเลขในนั้นมาจากรอบที่แล้ว ถ้าปล่อยไว้หน้าเว็บ
+  จะแสดงผลเก่าปนกับงานที่กำลังรันใหม่
+  """
+  with session_scope() as session:
+    for step in session.query(TaskStep).filter_by(tid=tid).all():
+      step.status = STATUS_PENDING
+      step.retry_count = 0
+      step.error_msg = None
+      step.started_at = None
+      step.completed_at = None
+
+    result = session.query(TaskResult).filter_by(tid=tid).one_or_none()
+    if result is not None:
+      session.delete(result)
+
+    task = session.get(Task, tid)
+    if task is not None:
+      task.status = task_status(STEP_NAMES[0], STATUS_PENDING)
+      task.updated_at = datetime.now()
+
+  for step_name in STEP_NAMES:
+    clean_step_outputs(tid, step_name)
+
+
 def load_task_params(tid: str) -> dict | None:
   """อ่านค่าที่ step ต้องใช้ออกมาเป็น dict ธรรมดา เพื่อไม่ต้องถือ session ไว้ข้ามขั้น"""
   with session_scope() as session:

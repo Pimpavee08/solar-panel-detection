@@ -172,6 +172,25 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
 .leaflet-popup-content b{color:var(--accent)}
 .leaflet-popup-close-button{color:var(--muted)!important}
 
+/* ---------- ตัวอ่าน log ---------- */
+#logbox{position:fixed;inset:0;z-index:8000;background:rgba(6,9,13,.78);
+  display:none;place-items:center;padding:24px;backdrop-filter:blur(3px)}
+#logbox.on{display:grid}
+.log-card{width:100%;max-width:860px;max-height:82vh;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+.log-head{display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:1px solid var(--line)}
+.log-head h4{font-size:13px;flex:1}
+.log-head select{width:auto;padding:5px 8px;font-size:12px}
+.log-body{flex:1;overflow:auto;margin:0;padding:14px 16px;font-size:11.5px;line-height:1.65;
+  font-family:'Cascadia Mono',Consolas,monospace;white-space:pre-wrap;word-break:break-word;
+  color:var(--muted)}
+.log-body .hl{color:var(--err)}
+.step-time{color:var(--muted-2);font-size:10.5px;margin-left:6px}
+.pstep .log-link{margin-left:auto;font-size:10.5px;color:var(--info);
+  text-decoration:underline;flex-shrink:0;padding-left:8px}
+.pstep{align-items:center}
+.rerun-row{display:flex;gap:6px;margin-top:10px}
+
 /* ---------- หน้าเข้าสู่ระบบ ---------- */
 #gate{position:fixed;inset:0;z-index:9000;background:var(--bg);
   display:none;place-items:center;padding:24px}
@@ -329,6 +348,17 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
   </div>
 </main>
 
+<div id="logbox" onclick="if(event.target===this) closeLog()">
+  <div class="log-card">
+    <div class="log-head">
+      <h4 id="log_title">Log</h4>
+      <select id="log_attempt" onchange="loadLog()"></select>
+      <button class="icon-btn" onclick="closeLog()">&#10005;</button>
+    </div>
+    <pre class="log-body" id="log_body"></pre>
+  </div>
+</div>
+
 <div id="gate">
   <div class="gate-card">
     <div class="brand"><div class="dot"></div><div>Solar Detection Console</div></div>
@@ -363,7 +393,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
    สถานะรวมของหน้าเว็บ
    ========================================================= */
 const S = {
-  user: null,
+  user: null, airflowMode: false, logStep: null,
   tasks: [], currentTid: null, geojson: null,
   aoi: null,            // {min_lat,min_lng,max_lat,max_lng}
   mode: null,           // null | 'draw' | 'measure'
@@ -614,15 +644,30 @@ function trackProgress(tid, title){
   tick(); S.pollTimer = setInterval(tick, 2000);
 }
 
+function stepDuration(step){
+  if(!step.started_at) return '';
+  const end = step.completed_at ? new Date(step.completed_at) : new Date();
+  const sec = (end - new Date(step.started_at)) / 1000;
+  if(sec < 0 || !isFinite(sec)) return '';
+  return '<span class="step-time">' +
+    (sec < 60 ? sec.toFixed(1) + ' วิ' : Math.floor(sec/60) + ' น. ' + Math.round(sec%60) + ' วิ') +
+    '</span>';
+}
+
 function renderStepper(p){
   const mark = {completed:'✓', failed:'!', running:'', pending:''};
   let html = p.steps.map(s => {
     // retry_count > 0 แปลว่า step นี้เคยล้มเหลวแล้วกำลังลองใหม่ ตามกฎ retry สูงสุด 5 ครั้ง
     const retry = s.retry_count > 0
       ? ' <span style="color:var(--warn)">(ลองใหม่ ' + s.retry_count + '/5)</span>' : '';
+    // log มีเฉพาะ step ที่เริ่มทำงานไปแล้ว และเฉพาะตอนที่ Airflow เป็นคนรัน
+    const log = (S.airflowMode && s.started_at)
+      ? `<a class="log-link" href="#" onclick="openLog('${s.step_name}',${s.retry_count + 1});return false">log</a>`
+      : '';
     return '<div class="pstep ' + STEP_CLASS[s.status] + '">' +
       '<div class="mk">' + (mark[s.status] || '') + '</div>' +
-      '<div>' + (STEP_LABELS[s.step_name] || s.step_name) + retry + '</div></div>';
+      '<div>' + (STEP_LABELS[s.step_name] || s.step_name) + retry + stepDuration(s) + '</div>' +
+      log + '</div>';
   }).join('');
 
   const failed = p.steps.find(s => s.status === 'failed');
@@ -630,8 +675,69 @@ function renderStepper(p){
     html += '<div class="alert alert-warn" style="margin-top:8px"><b>สาเหตุ:</b><br>' +
             esc(failed.error_msg) + '</div>';
   }
+  if(p.state === 'failed'){
+    html += `<div class="rerun-row"><button class="btn btn-ghost btn-sm" onclick="rerunTask('${p.tid}')">สั่งรันใหม่ตั้งแต่ต้น</button></div>`;
+  }
   $('stepper').innerHTML = html;
 }
+
+/* =========================================================
+   สั่งรันใหม่
+   ========================================================= */
+async function rerunTask(tid){
+  const t = S.tasks.find(x => x.tid === tid);
+  if(!confirm(`สั่งรันงาน "${(t && t.title) || tid}" ใหม่ตั้งแต่ต้น?\nผลลัพธ์เดิมของงานนี้จะถูกล้างทิ้ง`)) return;
+  try{
+    const res = await fetch('/tasks/' + tid + '/rerun', {method:'POST'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || 'สั่งรันใหม่ไม่สำเร็จ');
+    toast('สั่งรันใหม่แล้ว', 'ok');
+    S.currentTid = tid;
+    switchTab('new');
+    trackProgress(tid, (t && t.title) || tid);
+  }catch(err){ toast(err.message, 'err'); }
+}
+
+/* =========================================================
+   ตัวอ่าน log จาก Airflow
+   ========================================================= */
+function openLog(stepName, attempts){
+  S.logStep = stepName;
+  $('log_title').textContent = 'Log — ' + (STEP_LABELS[stepName] || stepName);
+  // ครั้งที่ลองมากกว่า 1 ครั้งจะมี log แยกไฟล์กัน ให้เลือกดูได้
+  const sel = $('log_attempt');
+  sel.innerHTML = '';
+  for(let i = attempts; i >= 1; i--){
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = 'ครั้งที่ ' + i;
+    sel.appendChild(opt);
+  }
+  sel.style.display = attempts > 1 ? '' : 'none';
+  $('logbox').classList.add('on');
+  loadLog();
+}
+
+function closeLog(){ $('logbox').classList.remove('on'); }
+
+async function loadLog(){
+  const body = $('log_body');
+  body.textContent = 'กำลังโหลด...';
+  try{
+    const res = await fetch('/tasks/' + S.currentTid + '/steps/' + S.logStep +
+                            '/log?attempt=' + $('log_attempt').value);
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || 'อ่าน log ไม่ได้');
+    // เน้นบรรทัดที่เป็นข้อผิดพลาดให้หาเจอง่าย
+    body.innerHTML = esc(data.log).replace(
+      /^(.*(ERROR|Traceback|Exception|Error:).*)$/gm, '<span class="hl">$1</span>');
+    body.scrollTop = body.scrollHeight;
+  }catch(err){
+    body.textContent = err.message;
+  }
+}
+
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeLog(); });
 
 /* =========================================================
    รายการงาน
@@ -678,6 +784,8 @@ function renderTasks(){
         '<a class="icon-btn" href="/tasks/' + t.tid + '/satellite">ภาพ TIF</a>' +
         '<a class="icon-btn" href="/tasks/' + t.tid + '/overlay">Overlay</a>' +
         '<button class="icon-btn" onclick="reuseAOI(\'' + t.tid + '\')">ใช้พื้นที่นี้</button>' +
+        (t.state === 'failed'
+          ? `<button class="icon-btn" onclick="rerunTask('${t.tid}')">รันใหม่</button>` : '') +
         '<button class="icon-btn danger" onclick="removeTask(\'' + t.tid + '\')">ลบ</button>' +
       '</div>' +
     '</div>';
@@ -728,7 +836,18 @@ async function openTask(tid){
   drawAOI({min_lat:task.bbox_min_lat, min_lng:task.bbox_min_lng,
            max_lat:task.bbox_max_lat, max_lng:task.bbox_max_lng});
 
-  if(task.state === 'running'){ switchTab('new'); trackProgress(tid, task.title); }
+  // แสดงประวัติ step ของงานที่เปิดอยู่เสมอ ไม่ใช่เฉพาะตอนกำลังรัน
+  // งานที่ล้มเหลวจะได้เห็นสาเหตุและปุ่มสั่งรันใหม่ด้วย
+  if(task.state === 'running'){
+    switchTab('new');
+    trackProgress(tid, task.title);
+  }else{
+    try{
+      const res = await fetch('/tasks/' + tid + '/progress');
+      if(res.ok) renderStepper(await res.json());
+    }catch(e){}
+    if(task.state === 'failed') switchTab('new');
+  }
 
   await loadOverlay(tid);
 
@@ -907,17 +1026,25 @@ async function submitGate(){
   }
 }
 
+async function detectExecutor(){
+  try{
+    const res = await fetch('/health');
+    S.airflowMode = res.ok && (await res.json()).executor === 'airflow';
+  }catch(e){ S.airflowMode = false; }
+}
+
 function enterApp(user){
   S.user = user;
   $('gate').classList.remove('on');
   $('gate_password').value = '';
   $('user_chip').innerHTML = '<b>' + esc(user.name) + '</b>' +
     '<button class="hlink" style="padding:4px 8px" onclick="logout()">ออกจากระบบ</button>';
-  loadTasks();
+  detectExecutor().then(loadTasks);
 }
 
 function showGate(){
   S.user = null;
+  closeLog();
   clearInterval(S.pollTimer); S.pollTimer = null;
   S.tasks = []; clearResult();
   $('user_chip').innerHTML = '';

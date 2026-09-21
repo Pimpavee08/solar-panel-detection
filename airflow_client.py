@@ -15,6 +15,7 @@
 """
 
 import os
+import time
 
 import requests
 
@@ -48,21 +49,31 @@ def _api_root() -> str:
   return f"{base_url()}/api/{version}"
 
 
-def trigger_dag(tid: str) -> str:
-  """สั่งเริ่ม DAG run หนึ่งครั้งสำหรับ Task นี้ คืน dag_run_id ที่ Airflow ตั้งให้
+def run_id_for(tid: str, rerun: bool = False) -> str:
+  """ตั้งชื่อ dag_run
 
-  ใช้ tid เป็น dag_run_id ด้วย จึงกันไม่ให้ Task เดียวถูกสั่งรันซ้ำซ้อน
-  (Airflow จะตอบ 409 ถ้ามี run id ซ้ำ)
+  ครั้งแรกใช้ชื่อคงที่ตาม tid เพื่อกันไม่ให้งานเดียวถูกสั่งซ้ำ (Airflow ตอบ 409)
+  ส่วนการสั่งรันใหม่เป็นเจตนาของผู้ใช้ จึงต่อท้ายด้วยเวลาให้ชื่อไม่ชนของเดิม
   """
+  if not rerun:
+    return f"task__{tid}"
+  return f"task__{tid}__r{int(time.time())}"
+
+
+def trigger_dag(tid: str, rerun: bool = False) -> str:
+  """สั่งเริ่ม DAG run หนึ่งครั้งสำหรับ Task นี้ คืน dag_run_id ที่ใช้"""
   if not is_enabled():
     raise AirflowError("ยังไม่ได้ตั้งค่า SOLAR_AIRFLOW_URL")
 
+  run_id = run_id_for(tid, rerun)
   url = f"{_api_root()}/dags/{DAG_ID}/dagRuns"
-  payload = {"dag_run_id": f"task__{tid}", "conf": {"tid": tid}}
 
   try:
     response = requests.post(
-        url, json=payload, auth=_auth(), timeout=TIMEOUT
+        url,
+        json={"dag_run_id": run_id, "conf": {"tid": tid}},
+        auth=_auth(),
+        timeout=TIMEOUT,
     )
   except requests.RequestException as exc:
     raise AirflowError(f"ติดต่อ Airflow ที่ {base_url()} ไม่ได้: {exc}") from exc
@@ -73,9 +84,41 @@ def trigger_dag(tid: str) -> str:
     )
 
   if response.status_code == 409:
-    return f"task__{tid}"  # มี run นี้อยู่แล้ว ถือว่าสั่งสำเร็จ
+    return run_id  # มี run นี้อยู่แล้ว ถือว่าสั่งสำเร็จ
 
-  return response.json().get("dag_run_id", f"task__{tid}")
+  return response.json().get("dag_run_id", run_id)
+
+
+def fetch_log(run_id: str, step_name: str, try_number: int = 1) -> str:
+  """ดึง log ของ task instance หนึ่งครั้งที่ลอง
+
+  try_number เริ่มที่ 1 การลองครั้งที่ 2 เป็นต้นไปมี log แยกไฟล์กัน
+  """
+  if not is_enabled():
+    raise AirflowError("ยังไม่ได้ตั้งค่า SOLAR_AIRFLOW_URL")
+
+  url = (
+      f"{_api_root()}/dags/{DAG_ID}/dagRuns/{run_id}"
+      f"/taskInstances/{step_name}/logs/{try_number}"
+  )
+  try:
+    response = requests.get(
+        url,
+        auth=_auth(),
+        timeout=TIMEOUT,
+        params={"full_content": "true"},
+        headers={"Accept": "text/plain"},
+    )
+  except requests.RequestException as exc:
+    raise AirflowError(f"ติดต่อ Airflow ไม่ได้: {exc}") from exc
+
+  if response.status_code == 404:
+    raise AirflowError("ไม่พบ log ของขั้นตอนนี้ (อาจยังไม่ได้เริ่มทำงาน)")
+  if response.status_code != 200:
+    raise AirflowError(
+        f"Airflow ตอบ {response.status_code}: {response.text[:200]}"
+    )
+  return response.text
 
 
 def health() -> dict:

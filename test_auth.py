@@ -148,6 +148,10 @@ class TestTaskIsolation(AuthTestCase):
     self.assertEqual(client.get("/tasks/whatever").status_code, 401)
     self.assertEqual(client.get("/tasks/whatever/progress").status_code, 401)
     self.assertEqual(client.delete("/tasks/whatever").status_code, 401)
+    self.assertEqual(client.post("/tasks/whatever/rerun").status_code, 401)
+    self.assertEqual(
+        client.get("/tasks/whatever/steps/run_inference/log").status_code, 401
+    )
 
   def test_task_is_owned_by_its_creator(self):
     client = _client()
@@ -187,10 +191,12 @@ class TestTaskIsolation(AuthTestCase):
         f"/tasks/{tid}/satellite",
         f"/tasks/{tid}/overlay",
         f"/tasks/{tid}/overlay/meta",
+        f"/tasks/{tid}/steps/run_inference/log",
     ):
       self.assertEqual(bob.get(path).status_code, 404, path)
 
     self.assertEqual(bob.delete(f"/tasks/{tid}").status_code, 404)
+    self.assertEqual(bob.post(f"/tasks/{tid}/rerun").status_code, 404)
 
     # งานของ alice ต้องยังอยู่ครบหลังจาก bob พยายามลบ
     self.assertEqual(alice.get(f"/tasks/{tid}").status_code, 200)

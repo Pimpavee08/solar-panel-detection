@@ -23,6 +23,7 @@ os.environ.setdefault(
 from fastapi.testclient import TestClient  # noqa: E402
 
 import overlay  # noqa: E402
+import airflow_client  # noqa: E402
 import pipeline  # noqa: E402
 from app import app  # noqa: E402
 from db import session_scope  # noqa: E402
@@ -171,6 +172,85 @@ class TestSolarAPI(unittest.TestCase):
     self.assertEqual(
         self.client.get(f"/tasks/{tid}/overlay/meta").status_code, 404
     )
+
+
+class TestLogAndRerun(unittest.TestCase):
+  """endpoint ที่ดึง log จาก Airflow และสั่งรันใหม่"""
+
+  def setUp(self):
+    self.client = TestClient(app)
+    self.client.post(
+        "/auth/register",
+        json={
+            "name": "ผู้ใช้ทดสอบ",
+            "email": f"log-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "test-password-1",
+        },
+    )
+    with patch("fastapi.BackgroundTasks.add_task"):
+      self.tid = self.client.post("/tasks", json=VALID_PAYLOAD).json()["tid"]
+
+  def tearDown(self):
+    _clear_tasks()
+
+  def test_unknown_step_name_is_404(self):
+    response = self.client.get(f"/tasks/{self.tid}/steps/ไม่มีขั้นนี้/log")
+    self.assertEqual(response.status_code, 404)
+
+  def test_log_explains_there_is_none_without_airflow(self):
+    """เทสต์รันในโหมดที่เว็บรัน pipeline เอง จึงไม่มี log แยกราย step"""
+    response = self.client.get(f"/tasks/{self.tid}/steps/run_inference/log")
+    self.assertEqual(response.status_code, 404)
+    self.assertIn("โปรเซสของเว็บ", response.json()["detail"])
+
+  def test_rerun_resets_steps_and_clears_result(self):
+    # ทำให้ดูเหมือนงานที่รันจบแล้วและล้มเหลว
+    pipeline.mark_step_completed(self.tid, STEP_NAMES[0])
+    pipeline.mark_step_failed(self.tid, STEP_NAMES[1], "พังไปแล้ว")
+    pipeline._save_result(
+        self.tid, {"total_panels": 5, "total_surface_area_sqm": 1.0}, None
+    )
+
+    with patch("fastapi.BackgroundTasks.add_task") as add_task:
+      response = self.client.post(f"/tasks/{self.tid}/rerun")
+
+    self.assertEqual(response.status_code, 202)
+    self.assertEqual(response.json()["executor"], "background")
+    add_task.assert_called_once()
+
+    with session_scope() as session:
+      steps = session.query(TaskStep).filter_by(tid=self.tid).all()
+      for step in steps:
+        self.assertEqual(step.status, STATUS_PENDING)
+        self.assertEqual(step.retry_count, 0)
+        self.assertIsNone(step.error_msg)
+        self.assertIsNone(step.started_at)
+      # ตัวเลขของรอบที่แล้วต้องหายไป ไม่ค้างมาปนกับรอบใหม่
+      self.assertIsNone(
+          session.query(TaskResult).filter_by(tid=self.tid).one_or_none()
+      )
+
+  def test_rerun_refuses_while_running(self):
+    pipeline.mark_step_running(self.tid, STEP_NAMES[1])
+    response = self.client.post(f"/tasks/{self.tid}/rerun")
+    self.assertEqual(response.status_code, 409)
+
+  def test_rerun_requires_login(self):
+    self.assertEqual(
+        TestClient(app).post(f"/tasks/{self.tid}/rerun").status_code, 401
+    )
+
+
+class TestAirflowRunIds(unittest.TestCase):
+  def test_first_run_id_is_stable_but_rerun_is_not(self):
+    """ชื่อคงที่กันสั่งซ้ำ ส่วนรันใหม่ต้องได้ชื่อใหม่ ไม่งั้น Airflow จะตอบ 409"""
+    tid = "abc-123"
+    self.assertEqual(airflow_client.run_id_for(tid), f"task__{tid}")
+    self.assertEqual(airflow_client.run_id_for(tid), f"task__{tid}")
+
+    rerun = airflow_client.run_id_for(tid, rerun=True)
+    self.assertNotEqual(rerun, f"task__{tid}")
+    self.assertTrue(rerun.startswith(f"task__{tid}__r"))
 
 
 class TestPipelineSteps(unittest.TestCase):

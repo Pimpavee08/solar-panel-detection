@@ -131,6 +131,7 @@ class TaskResponse(BaseModel):
   bbox_max_lat: float
   bbox_max_lng: float
   zoom: int
+  dag_run_id: Optional[str] = None
   created_at: datetime
   updated_at: datetime
   result: Optional[ResultResponse] = None
@@ -168,6 +169,7 @@ def serialize_task(task: Task) -> dict:
       "bbox_max_lat": task.bbox_max_lat,
       "bbox_max_lng": task.bbox_max_lng,
       "zoom": task.zoom,
+      "dag_run_id": task.dag_run_id,
       "created_at": task.created_at,
       "updated_at": task.updated_at,
       "result": None,
@@ -181,6 +183,13 @@ def serialize_task(task: Task) -> dict:
         "shapefile_path": task.result.shapefile_path,
     }
   return payload
+
+
+def _save_dag_run_id(tid: str, dag_run_id: str) -> None:
+  with session_scope() as session:
+    task = session.get(Task, tid)
+    if task is not None:
+      task.dag_run_id = dag_run_id
 
 
 def get_task_or_404(session, tid: str, uid: str) -> Task:
@@ -301,6 +310,7 @@ def create_task(
   if airflow_client.is_enabled():
     try:
       dag_run_id = airflow_client.trigger_dag(tid)
+      _save_dag_run_id(tid, dag_run_id)
     except airflow_client.AirflowError as exc:
       # สั่ง Airflow ไม่ได้ ถือว่างานนี้ล้มเหลวตั้งแต่ step แรก จะได้ไม่ค้าง pending
       pipeline.mark_step_failed(tid, STEP_NAMES[0], str(exc))
@@ -387,6 +397,82 @@ def delete_task(tid: str, user: dict = Depends(auth.current_user)):
       "database_deleted": True,
       "disk_files_deleted": disk_deleted,
   }
+
+
+@app.get("/tasks/{tid}/steps/{step_name}/log", tags=["Tasks"])
+def step_log(
+    tid: str,
+    step_name: str,
+    attempt: int = 1,
+    user: dict = Depends(auth.current_user),
+):
+  """ดึง log ของขั้นตอนหนึ่งจาก Airflow มาแสดงในหน้าเว็บ
+
+  ตรวจสิทธิ์เจ้าของก่อนเสมอ เพราะ endpoint นี้ส่งต่อข้อมูลจาก Airflow
+  ซึ่งตัวมันเองไม่รู้จักผู้ใช้เลย
+  """
+  if step_name not in STEP_NAMES:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"ไม่มีขั้นตอนชื่อ '{step_name}'",
+    )
+
+  with session_scope() as session:
+    task = get_task_or_404(session, tid, user["uid"])
+    dag_run_id = task.dag_run_id
+
+  if not airflow_client.is_enabled():
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="โหมดนี้รัน pipeline ในโปรเซสของเว็บ จึงไม่มี log แยกราย step",
+    )
+  if not dag_run_id:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="งานนี้ไม่ได้ถูกสั่งผ่าน Airflow จึงไม่มี log",
+    )
+
+  try:
+    text = airflow_client.fetch_log(dag_run_id, step_name, max(1, attempt))
+  except airflow_client.AirflowError as exc:
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+    ) from exc
+
+  return {"tid": tid, "step_name": step_name, "attempt": attempt, "log": text}
+
+
+@app.post("/tasks/{tid}/rerun", status_code=status.HTTP_202_ACCEPTED, tags=["Tasks"])
+def rerun_task(
+    tid: str,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(auth.current_user),
+):
+  """สั่งรัน Task เดิมใหม่ตั้งแต่ต้น โดยใช้พิกัดและการตั้งค่าเดิม"""
+  with session_scope() as session:
+    task = get_task_or_404(session, tid, user["uid"])
+    if derive_state(task.status) == STATUS_RUNNING:
+      raise HTTPException(
+          status_code=status.HTTP_409_CONFLICT,
+          detail="งานนี้กำลังทำงานอยู่ รอให้จบก่อน",
+      )
+
+  pipeline.reset_task_steps(tid)
+
+  if airflow_client.is_enabled():
+    try:
+      dag_run_id = airflow_client.trigger_dag(tid, rerun=True)
+    except airflow_client.AirflowError as exc:
+      pipeline.mark_step_failed(tid, STEP_NAMES[0], str(exc))
+      raise HTTPException(
+          status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+          detail=f"สั่งงาน Airflow ไม่สำเร็จ: {exc}",
+      ) from exc
+    _save_dag_run_id(tid, dag_run_id)
+    return {"tid": tid, "executor": "airflow", "dag_run_id": dag_run_id}
+
+  background_tasks.add_task(pipeline.run_task, tid)
+  return {"tid": tid, "executor": "background", "dag_run_id": None}
 
 
 # -------------------------------------------------------------

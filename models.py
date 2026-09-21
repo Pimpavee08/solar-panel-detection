@@ -93,6 +93,11 @@ class Task(Base):
   # ไม่มีในสเปก แต่หน้าเว็บให้ผู้ใช้เลือกระดับซูมได้ จึงต้องเก็บไว้ด้วย
   zoom = Column(Integer, nullable=False, default=18)
 
+  # ไม่มีในสเปกเช่นกัน — เก็บ dag_run ล่าสุดของ Task นี้ไว้เพื่อให้หน้าเว็บ
+  # ขอ log ของแต่ละ step จาก Airflow ได้ ถ้าไม่เก็บไว้จะต้องไล่หาจาก dag run
+  # ทั้งหมดใน Airflow ซึ่งช้าและเปราะเมื่องานเยอะขึ้น
+  dag_run_id = Column(String(250), nullable=True)
+
   created_at = Column(DateTime, nullable=False, default=datetime.now)
   updated_at = Column(
       DateTime, nullable=False, default=datetime.now, onupdate=datetime.now

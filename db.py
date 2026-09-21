@@ -9,7 +9,7 @@ environment variable ตัวเดียว โดยไม่ต้องแ�
 
 from contextlib import contextmanager
 import os
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 from models import Base
 
@@ -45,9 +45,30 @@ if _is_sqlite:
     cursor.close()
 
 
+# คอลัมน์ที่เพิ่มเข้ามาหลังจากตารางถูกสร้างไปแล้วในบางเครื่อง
+# create_all() สร้างได้เฉพาะตารางใหม่ ไม่เพิ่มคอลัมน์ให้ตารางเดิม
+ADDED_COLUMNS = {
+    "task": {"dag_run_id": "VARCHAR(250)"},
+}
+
+
+def _add_missing_columns() -> None:
+  inspector = inspect(engine)
+  with engine.begin() as conn:
+    for table, columns in ADDED_COLUMNS.items():
+      if not inspector.has_table(table):
+        continue
+      existing = {c["name"] for c in inspector.get_columns(table)}
+      for name, sql_type in columns.items():
+        if name not in existing:
+          conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+          print(f"[db] เพิ่มคอลัมน์ {table}.{name}")
+
+
 def init_db() -> None:
   """สร้างตารางทั้งหมดถ้ายังไม่มี (ไม่แตะตาราง job_results ของเวอร์ชันเดิม)"""
   Base.metadata.create_all(bind=engine)
+  _add_missing_columns()
 
 
 @contextmanager
