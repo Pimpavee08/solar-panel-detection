@@ -212,6 +212,56 @@ class TestTaskIsolation(AuthTestCase):
     self.assertEqual(client.get("/tasks").status_code, 401)
 
 
+class TestLoginRateLimit(AuthTestCase):
+  """กันการเดารหัสผ่านแบบยิงรัว"""
+
+  def test_repeated_failures_are_blocked(self):
+    client = _client()
+    email, _, _ = self.register(client)
+    client.post("/auth/logout")
+
+    bad = {"email": email, "password": "wrong-password"}
+    for _ in range(auth.LOGIN_MAX_ATTEMPTS):
+      self.assertEqual(client.post("/auth/login", json=bad).status_code, 401)
+
+    blocked = client.post("/auth/login", json=bad)
+    self.assertEqual(blocked.status_code, 429)
+    self.assertIn("Retry-After", blocked.headers)
+
+  def test_correct_password_is_blocked_too_once_limited(self):
+    """เดารหัสผ่านจนโดนล็อกแล้ว ต่อให้ทายถูกก็ต้องยังเข้าไม่ได้"""
+    client = _client()
+    email, password, _ = self.register(client)
+    client.post("/auth/logout")
+
+    for _ in range(auth.LOGIN_MAX_ATTEMPTS):
+      client.post("/auth/login", json={"email": email, "password": "nope-nope"})
+
+    response = client.post(
+        "/auth/login", json={"email": email, "password": password}
+    )
+    self.assertEqual(response.status_code, 429)
+
+  def test_success_resets_the_counter(self):
+    """พิมพ์ผิดไม่กี่ครั้งแล้วเข้าได้ ไม่ควรค้างอยู่ใกล้เพดาน"""
+    client = _client()
+    email, password, _ = self.register(client)
+    client.post("/auth/logout")
+
+    for _ in range(auth.LOGIN_MAX_ATTEMPTS - 1):
+      client.post("/auth/login", json={"email": email, "password": "nope-nope"})
+
+    ok = client.post("/auth/login", json={"email": email, "password": password})
+    self.assertEqual(ok.status_code, 200)
+
+    # นับใหม่ตั้งแต่ศูนย์ จึงยังลองผิดได้อีกเต็มโควต้า
+    client.post("/auth/logout")
+    again = client.post(
+        "/auth/login", json={"email": email, "password": "nope-nope"}
+    )
+    self.assertEqual(again.status_code, 401)
+
+
 class TestPublicEndpoints(AuthTestCase):
   def test_dashboard_and_health_stay_public(self):
     client = _client()

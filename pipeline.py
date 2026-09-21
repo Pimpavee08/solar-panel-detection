@@ -325,7 +325,6 @@ def _step_parse_result(tid: str, task: dict) -> None:
       output_dir(tid),
       output_geojson_path=geojson_path(tid),
       job_name=tid,
-      db_path=None,  # Task_Result เป็นที่เก็บผลลัพธ์แทนตาราง job_results เดิม
   )
   if summary.get("status") != "completed":
     raise RuntimeError(summary.get("message", "แปลงผลลัพธ์ไม่สำเร็จ"))

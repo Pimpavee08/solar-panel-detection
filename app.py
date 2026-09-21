@@ -238,6 +238,7 @@ def health():
 @app.post("/auth/register", response_model=UserResponse, tags=["Auth"])
 def register(payload: RegisterRequest, request: Request):
   """สมัครสมาชิกแล้วเข้าสู่ระบบให้เลย"""
+  auth.check_login_rate(request)
   try:
     user = auth.create_user(payload.name, payload.email, payload.password)
   except ValueError as exc:
@@ -245,18 +246,21 @@ def register(payload: RegisterRequest, request: Request):
         status_code=status.HTTP_409_CONFLICT, detail=str(exc)
     ) from exc
 
+  auth.clear_login_attempts(request)
   auth.login_session(request, user["uid"])
   return user
 
 
 @app.post("/auth/login", response_model=UserResponse, tags=["Auth"])
 def login(payload: LoginRequest, request: Request):
+  auth.check_login_rate(request)
   user = auth.authenticate(payload.email, payload.password)
   if user is None:
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="อีเมลหรือรหัสผ่านไม่ถูกต้อง",
     )
+  auth.clear_login_attempts(request)
   auth.login_session(request, user["uid"])
   return user
 

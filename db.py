@@ -66,7 +66,7 @@ def _add_missing_columns() -> None:
 
 
 def init_db() -> None:
-  """สร้างตารางทั้งหมดถ้ายังไม่มี (ไม่แตะตาราง job_results ของเวอร์ชันเดิม)"""
+  """สร้างตารางทั้งหมดถ้ายังไม่มี และเพิ่มคอลัมน์ที่เพิ่มมาทีหลัง"""
   Base.metadata.create_all(bind=engine)
   _add_missing_columns()
 

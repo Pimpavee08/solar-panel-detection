@@ -10,9 +10,12 @@ bcrypt อ่านรหัสผ่านได้สูงสุด 72 ไบ
 """
 
 import base64
+from collections import defaultdict, deque
 import hashlib
 import os
 import secrets
+import threading
+import time
 
 import bcrypt
 from fastapi import HTTPException, Request, status
@@ -21,6 +24,10 @@ from db import session_scope
 from models import User
 
 SESSION_KEY = "uid"
+
+# จำกัดจำนวนครั้งที่ลองล็อกอินต่อหนึ่ง IP
+LOGIN_MAX_ATTEMPTS = int(os.environ.get("SOLAR_LOGIN_MAX_ATTEMPTS", "10"))
+LOGIN_WINDOW_SECONDS = int(os.environ.get("SOLAR_LOGIN_WINDOW", "300"))
 
 
 def secret_key() -> str:
@@ -38,6 +45,60 @@ def secret_key() -> str:
       " session จะหลุดเมื่อรีสตาร์ต"
   )
   return secrets.token_urlsafe(32)
+
+
+# -------------------------------------------------------------
+# จำกัดอัตราการลองล็อกอิน
+# -------------------------------------------------------------
+_attempts: dict[str, deque] = defaultdict(deque)
+_attempts_lock = threading.Lock()
+
+
+def _client_key(request: Request) -> str:
+  # ถ้าอยู่หลัง reverse proxy ต้องอ่าน X-Forwarded-For แทน มิฉะนั้นทุกคนจะนับรวมกัน
+  forwarded = request.headers.get("x-forwarded-for")
+  if forwarded:
+    return forwarded.split(",")[0].strip()
+  return request.client.host if request.client else "unknown"
+
+
+def check_login_rate(request: Request) -> None:
+  """โยน 429 เมื่อลองล็อกอินถี่เกินกำหนด
+
+  เก็บไว้ในหน่วยความจำของโปรเซสนี้เท่านั้น จึงรีเซ็ตเมื่อรีสตาร์ต และถ้ารัน
+  uvicorn หลาย worker แต่ละ worker จะนับแยกกัน — พอสำหรับกันการเดารหัสผ่าน
+  แบบอัตโนมัติ แต่ถ้าต้องการของจริงจังควรย้ายไปเก็บที่ Redis หรือหน้า proxy
+  """
+  key = _client_key(request)
+  now = time.monotonic()
+  cutoff = now - LOGIN_WINDOW_SECONDS
+
+  with _attempts_lock:
+    history = _attempts[key]
+    while history and history[0] < cutoff:
+      history.popleft()
+
+    if len(history) >= LOGIN_MAX_ATTEMPTS:
+      retry_after = int(history[0] - cutoff) + 1
+      raise HTTPException(
+          status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+          detail=(
+              f"ลองเข้าสู่ระบบบ่อยเกินไป กรุณารออีก {retry_after} วินาที"
+          ),
+          headers={"Retry-After": str(retry_after)},
+      )
+    history.append(now)
+
+    # กันไม่ให้ dict โตไม่สิ้นสุดเมื่อมี IP แปลกหน้าเข้ามาเรื่อย ๆ
+    if len(_attempts) > 10000:
+      for stale in [k for k, v in _attempts.items() if not v or v[-1] < cutoff]:
+        del _attempts[stale]
+
+
+def clear_login_attempts(request: Request) -> None:
+  """ล็อกอินสำเร็จแล้วให้เริ่มนับใหม่ คนที่พิมพ์ผิดไม่ควรโดนล็อกค้าง"""
+  with _attempts_lock:
+    _attempts.pop(_client_key(request), None)
 
 
 def _prepare(raw: str) -> bytes:

@@ -18,5 +18,18 @@ os.environ.setdefault(
 os.environ.pop("SOLAR_AIRFLOW_URL", None)
 
 
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit():
+  """เทสต์ทุกตัวยิงมาจาก IP เดียวกัน ถ้าไม่ล้างตัวนับจะไปชนเพดานของตัวถัดไป"""
+  import auth
+
+  with auth._attempts_lock:
+    auth._attempts.clear()
+  yield
+
+
 def pytest_sessionfinish(session, exitstatus):
   shutil.rmtree(TEST_DB_DIR, ignore_errors=True)
