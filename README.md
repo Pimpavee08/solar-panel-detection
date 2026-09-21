@@ -17,7 +17,26 @@ generating_config → fetch_image → run_inference → parse_result
 แต่ละขั้นบันทึกสถานะลงตาราง `Task_Step` ถ้าล้มเหลวจะลองใหม่สูงสุด 5 ครั้งพร้อม
 เก็บสาเหตุไว้ และเขียน `Task_Result` เมื่อขั้นสุดท้ายสำเร็จเท่านั้น
 
-## เริ่มใช้งานเร็วที่สุด
+## เปิดด้วยคลิกเดียว
+
+ดับเบิลคลิก **`start.cmd`** — สคริปต์จะเปิด Docker Desktop, Airflow, PostgreSQL
+และเว็บให้ครบ แล้วเปิดเบราว์เซอร์ไปที่ <http://localhost:8009> เอง
+
+```bash
+.\start.ps1
+```
+
+```bash
+.\start.ps1 -Simple
+```
+
+แบบ `-Simple` ไม่ใช้ Docker รันเว็บกับ SQLite ที่พอร์ต 8008 · กด Ctrl+C เพื่อปิดเว็บ
+และสั่ง `docker compose down` ถ้าจะปิด Airflow ด้วย
+
+> ดับเบิลคลิก `start.ps1` ตรง ๆ ไม่ได้ Windows จะเปิดไฟล์ใน Notepad แทนการรัน
+> จึงมี `start.cmd` ไว้ครอบอีกชั้น
+
+## รันเองทีละคำสั่ง
 
 ไม่ต้องติดตั้ง Docker หรือ Airflow — เว็บจะรัน pipeline ในตัวเอง ใช้ SQLite
 
@@ -61,6 +80,7 @@ docker compose up -d --build
 | `airflow_client.py` | สั่ง DAG และดึง log ผ่าน REST API |
 | `solar_pipeline_dag.py` | DAG (ตัวชี้อยู่ที่ `dags/solar_dag.py`) |
 | `manage_users.py` | จัดการบัญชีผู้ใช้จากบรรทัดคำสั่ง |
+| `start.ps1` / `start.cmd` | เปิดระบบทั้งชุดด้วยคำสั่งเดียว |
 | `mock_model.py` | โมเดลจำลองสำหรับทดสอบเมื่อไม่มี `run.sh` |
 
 ## เอกสารเพิ่มเติม

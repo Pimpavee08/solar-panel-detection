@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# cmd.exe and Windows PowerShell expect CRLF; pin it so a clone or a
+# GitHub zip download on any machine still runs start.cmd correctly
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
