@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ไลบรารีที่ task ใน Airflow DAG ต้องใช้เท่านั้น
 #
 # ห้ามใส่ sqlalchemy / fastapi / uvicorn ที่นี่:
