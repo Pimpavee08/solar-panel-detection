@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +17,7 @@
 html,body{height:100%}
 body{
   background:var(--bg); color:var(--text); overflow:hidden;
+  /* คงฟอนต์ไทยไว้ในสแตก เพราะชื่องานที่ผู้ใช้พิมพ์ยังเป็นภาษาไทยได้ */
   font-family:'Segoe UI',Tahoma,'Noto Sans Thai',sans-serif; font-size:14px;
   display:grid; grid-template-rows:52px 1fr;
 }
@@ -242,10 +243,10 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
 
 <header>
   <div class="brand"><div class="dot"></div>
-    <div>Solar Detection Console<small>ตรวจจับแผงโซลาร์เซลล์จากภาพถ่ายดาวเทียม</small></div>
+    <div>Solar Detection Console<small>Solar panel detection from satellite imagery</small></div>
   </div>
   <div class="spacer"></div>
-  <div class="pill" id="pill_job">ยังไม่ได้เลือกงาน</div>
+  <div class="pill" id="pill_job">No job selected</div>
   <div class="user-chip" id="user_chip"></div>
   <a class="hlink" href="/docs" target="_blank">Swagger UI &#8599;</a>
 </header>
@@ -253,51 +254,51 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
 <main>
   <aside>
     <div class="tabs">
-      <button class="tab on" data-pane="new">สร้างงานใหม่</button>
-      <button class="tab" data-pane="jobs">รายการงาน <span id="task_count"></span></button>
+      <button class="tab on" data-pane="new">New job</button>
+      <button class="tab" data-pane="jobs">Jobs <span id="task_count"></span></button>
     </div>
 
     <!-- ============ สร้างงานใหม่ ============ -->
     <div class="pane on" id="pane_new">
       <div class="step" id="s1">
-        <div class="step-h"><div class="step-n">1</div><h3>เลือกพื้นที่ที่ต้องการตรวจ</h3></div>
-        <p class="hint">กดปุ่ม &ldquo;ลากกรอบพื้นที่&rdquo; บนแผนที่แล้วลากเมาส์ครอบบริเวณที่ต้องการ หรือเลือกจากพื้นที่ตัวอย่างด้านล่าง</p>
+        <div class="step-h"><div class="step-n">1</div><h3>Choose the area to scan</h3></div>
+        <p class="hint">Click &ldquo;Draw area&rdquo; on the map, then drag a box over the area you want &mdash; or pick one of the sample areas below.</p>
         <div class="chips">
-          <button class="chip" onclick="setAOI(14.0700,100.6020,14.0740,100.6070)">SIIT รังสิต</button>
-          <button class="chip" onclick="setAOI(13.5180,100.6480,13.5220,100.6530)">นิคมฯ บางปู</button>
-          <button class="chip" onclick="setAOI(13.7230,100.5250,13.7270,100.5300)">สยาม กรุงเทพฯ</button>
+          <button class="chip" onclick="setAOI(14.0700,100.6020,14.0740,100.6070)">SIIT Rangsit</button>
+          <button class="chip" onclick="setAOI(13.5180,100.6480,13.5220,100.6530)">Bang Pu Industrial Estate</button>
+          <button class="chip" onclick="setAOI(13.7230,100.5250,13.7270,100.5300)">Siam, Bangkok</button>
         </div>
-        <div class="aoi-box" id="aoi_box">ยังไม่ได้เลือกพื้นที่</div>
+        <div class="aoi-box" id="aoi_box">No area selected yet</div>
       </div>
 
       <div class="step" id="s2">
-        <div class="step-h"><div class="step-n">2</div><h3>ตั้งค่างาน</h3></div>
+        <div class="step-h"><div class="step-n">2</div><h3>Job settings</h3></div>
         <div style="margin-bottom:10px">
-          <label>ชื่องาน (Title) &mdash; ตั้งซ้ำกันได้ ระบบใช้ tid เป็นตัวอ้างอิง</label>
-          <input type="text" id="title" placeholder="เช่น สำรวจหลังคา SIIT รังสิต" maxlength="200">
+          <label>Job title &mdash; titles may repeat; the system identifies jobs by tid</label>
+          <input type="text" id="title" placeholder="e.g. SIIT Rangsit rooftop survey" maxlength="200">
         </div>
         <div>
-          <label>ระดับการซูม (Zoom) &mdash; ยิ่งสูงยิ่งละเอียดแต่ใช้เวลานานขึ้น</label>
+          <label>Zoom level &mdash; higher is more detailed but takes longer</label>
           <select id="zoom">
-            <option value="17">17 &mdash; หยาบ (~1.2 ม./พิกเซล)</option>
-            <option value="18" selected>18 &mdash; มาตรฐาน (~0.6 ม./พิกเซล)</option>
-            <option value="19">19 &mdash; ละเอียด (~0.3 ม./พิกเซล)</option>
-            <option value="20">20 &mdash; ละเอียดมาก (~0.15 ม./พิกเซล)</option>
+            <option value="17">17 &mdash; Coarse (~1.2 m/pixel)</option>
+            <option value="18" selected>18 &mdash; Standard (~0.6 m/pixel)</option>
+            <option value="19">19 &mdash; Detailed (~0.3 m/pixel)</option>
+            <option value="20">20 &mdash; Very detailed (~0.15 m/pixel)</option>
           </select>
         </div>
       </div>
 
       <div class="step" id="s3">
-        <div class="step-h"><div class="step-n">3</div><h3>เริ่มประมวลผล</h3></div>
-        <button class="btn btn-primary" id="btn_run" onclick="submitJob()" disabled>เริ่มตรวจจับแผงโซลาร์เซลล์</button>
+        <div class="step-h"><div class="step-n">3</div><h3>Run the detection</h3></div>
+        <button class="btn btn-primary" id="btn_run" onclick="submitJob()" disabled>Start solar panel detection</button>
         <div class="stepper" id="stepper"></div>
       </div>
     </div>
 
     <!-- ============ รายการงาน ============ -->
     <div class="pane" id="pane_jobs">
-      <input type="text" class="search" id="search" placeholder="ค้นหาชื่องาน..." oninput="renderTasks()">
-      <div id="job_list"><div class="empty">กำลังโหลด...</div></div>
+      <input type="text" class="search" id="search" placeholder="Search job title..." oninput="renderTasks()">
+      <div id="job_list"><div class="empty">Loading...</div></div>
     </div>
   </aside>
 
@@ -305,34 +306,34 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
     <div id="map"></div>
 
     <div class="float f-tools">
-      <button class="tool" id="t_draw" onclick="toggleDraw()">&#9645; ลากกรอบพื้นที่</button>
-      <button class="tool" id="t_measure" onclick="toggleMeasure()">&#128207; วัดระยะ/พื้นที่</button>
-      <button class="tool" onclick="fitResult()">&#9974; ซูมไปที่ผลลัพธ์</button>
+      <button class="tool" id="t_draw" onclick="toggleDraw()">&#9645; Draw area</button>
+      <button class="tool" id="t_measure" onclick="toggleMeasure()">&#128207; Measure</button>
+      <button class="tool" onclick="fitResult()">&#9974; Zoom to result</button>
     </div>
 
     <div class="float f-readout" id="readout"></div>
 
     <div class="float f-layers">
-      <h4>แผนที่ฐาน</h4>
-      <label class="lrow"><input type="radio" name="base" value="sat" checked onchange="setBase(this.value)"><span>ภาพดาวเทียม</span></label>
-      <label class="lrow"><input type="radio" name="base" value="hyb" onchange="setBase(this.value)"><span>ดาวเทียม + ชื่อถนน</span></label>
-      <label class="lrow"><input type="radio" name="base" value="osm" onchange="setBase(this.value)"><span>แผนที่ถนน (OSM)</span></label>
+      <h4>Base map</h4>
+      <label class="lrow"><input type="radio" name="base" value="sat" checked onchange="setBase(this.value)"><span>Satellite</span></label>
+      <label class="lrow"><input type="radio" name="base" value="hyb" onchange="setBase(this.value)"><span>Satellite + labels</span></label>
+      <label class="lrow"><input type="radio" name="base" value="osm" onchange="setBase(this.value)"><span>Street map (OSM)</span></label>
 
-      <h4>ชั้นข้อมูล</h4>
-      <label class="lrow"><input type="checkbox" id="l_det" checked onchange="syncLayers()"><span>แผงที่ตรวจพบ</span></label>
-      <label class="lrow"><input type="checkbox" id="l_aoi" checked onchange="syncLayers()"><span>กรอบพื้นที่ (AOI)</span></label>
-      <label style="margin-top:8px">ความทึบของชั้นแผง <b id="op_val" style="color:var(--text)">65%</b></label>
+      <h4>Layers</h4>
+      <label class="lrow"><input type="checkbox" id="l_det" checked onchange="syncLayers()"><span>Detected panels</span></label>
+      <label class="lrow"><input type="checkbox" id="l_aoi" checked onchange="syncLayers()"><span>Area of interest (AOI)</span></label>
+      <label style="margin-top:8px">Panel layer opacity <b id="op_val" style="color:var(--text)">65%</b></label>
       <input type="range" id="l_op" min="0" max="100" value="65" oninput="syncLayers()">
 
-      <h4>ภาพผลการตรวจจับ</h4>
-      <label class="lrow"><input type="checkbox" id="l_ovl" onchange="syncLayers()"><span>ซ้อนภาพ overlay</span></label>
-      <label style="margin-top:8px">ความทึบของภาพ <b id="ovl_val" style="color:var(--text)">100%</b></label>
+      <h4>Detection image</h4>
+      <label class="lrow"><input type="checkbox" id="l_ovl" onchange="syncLayers()"><span>Show overlay image</span></label>
+      <label style="margin-top:8px">Image opacity <b id="ovl_val" style="color:var(--text)">100%</b></label>
       <input type="range" id="l_ovl_op" min="0" max="100" value="100" oninput="syncLayers()">
     </div>
 
     <div class="float drawer" id="drawer">
       <div class="drawer-h">
-        <h4>แผงที่ตรวจพบ <span id="det_count" style="color:var(--muted-2);font-weight:400"></span></h4>
+        <h4>Detected panels <span id="det_count" style="color:var(--muted-2);font-weight:400"></span></h4>
         <button class="icon-btn" onclick="exportCSV()">CSV</button>
         <button class="icon-btn" onclick="closeDrawer()">&#10005;</button>
       </div>
@@ -340,10 +341,10 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
     </div>
 
     <div class="float f-stats">
-      <div class="stat"><div class="k">พื้นที่ผิวแผงรวม</div><div class="v" id="v_area">&mdash;<small>ตร.ม.</small></div></div>
-      <div class="stat"><div class="k">จำนวนแผงโดยประมาณ</div><div class="v" id="v_panels">&mdash;<small>แผง</small></div></div>
-      <div class="stat"><div class="k">กำลังการผลิตติดตั้ง</div><div class="v" id="v_cap">&mdash;<small>kWp</small></div></div>
-      <div class="stat"><div class="k">พลังงานที่ผลิตได้ต่อปี</div><div class="v" id="v_energy">&mdash;<small>MWh</small></div></div>
+      <div class="stat"><div class="k">Total panel area</div><div class="v" id="v_area">&mdash;<small>m&sup2;</small></div></div>
+      <div class="stat"><div class="k">Estimated panels</div><div class="v" id="v_panels">&mdash;<small>panels</small></div></div>
+      <div class="stat"><div class="k">Installed capacity</div><div class="v" id="v_cap">&mdash;<small>kWp</small></div></div>
+      <div class="stat"><div class="k">Annual generation</div><div class="v" id="v_energy">&mdash;<small>MWh</small></div></div>
     </div>
   </div>
 </main>
@@ -362,25 +363,25 @@ input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
 <div id="gate">
   <div class="gate-card">
     <div class="brand"><div class="dot"></div><div>Solar Detection Console</div></div>
-    <p class="gate-sub" id="gate_sub">เข้าสู่ระบบเพื่อดูและสร้างงานตรวจจับของคุณ</p>
+    <p class="gate-sub" id="gate_sub">Sign in to view and create your detection jobs</p>
 
     <form id="gate_form" onsubmit="return false">
       <div id="gate_name_row" style="display:none">
-        <label>ชื่อ</label>
+        <label>Name</label>
         <input type="text" id="gate_name" autocomplete="name" maxlength="120">
       </div>
-      <label>อีเมล</label>
+      <label>Email</label>
       <input type="email" id="gate_email" autocomplete="email" required>
-      <label>รหัสผ่าน</label>
+      <label>Password</label>
       <input type="password" id="gate_password" autocomplete="current-password" required>
 
       <div class="gate-err" id="gate_err"></div>
-      <button class="btn btn-primary" id="gate_submit" onclick="submitGate()">เข้าสู่ระบบ</button>
+      <button class="btn btn-primary" id="gate_submit" onclick="submitGate()">Sign in</button>
     </form>
 
     <div class="gate-switch">
-      <span id="gate_switch_text">ยังไม่มีบัญชี?</span>
-      <button onclick="toggleGateMode()" id="gate_switch_btn">สมัครสมาชิก</button>
+      <span id="gate_switch_text">No account yet?</span>
+      <button onclick="toggleGateMode()" id="gate_switch_btn">Create one</button>
     </div>
   </div>
 </div>
@@ -400,12 +401,12 @@ const S = {
   pollTimer: null,
 };
 
-// ชื่อไทยของแต่ละ step ตามเอกสาร (generating_config -> fetch_image -> run_inference -> parse_result)
+// ชื่อที่แสดงของแต่ละ step ตามเอกสาร (generating_config -> fetch_image -> run_inference -> parse_result)
 const STEP_LABELS = {
-  generating_config: 'สร้างไฟล์ config (.toml)',
-  fetch_image: 'ดึงภาพถ่ายดาวเทียม',
-  run_inference: 'AI ตรวจจับแผงโซลาร์เซลล์',
-  parse_result: 'แปลงผลลัพธ์และบันทึกข้อมูล',
+  generating_config: 'Generate config file (.toml)',
+  fetch_image: 'Fetch satellite imagery',
+  run_inference: 'AI solar panel detection',
+  parse_result: 'Parse results and save',
 };
 // สถานะใน DB -> คลาส CSS ของ stepper
 const STEP_CLASS = {pending:'pending', running:'active', completed:'done', failed:'failed'};
@@ -429,7 +430,7 @@ let aoiRect = null, detGeo = null, ovlImage = null;
 /* ---------- utilities ---------- */
 const $ = id => document.getElementById(id);
 const num = (n,d=0) => (n==null||isNaN(n)) ? '—'
-  : Number(n).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
+  : Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 
 /* ชื่องานและ error มาจากผู้ใช้/ระบบ จึงต้อง escape ก่อนยัดเข้า innerHTML */
 function esc(s){
@@ -478,7 +479,7 @@ function setMode(m){
   map.getContainer().style.cursor = m ? 'crosshair' : '';
   if(m === 'draw') map.dragging.disable(); else map.dragging.enable();
   if(m !== 'measure'){ measLayer.clearLayers(); measPts = []; $('readout').classList.remove('on'); }
-  if(m === 'measure') showReadout('คลิกบนแผนที่เพื่อเริ่มวัด - คลิกขวาเพื่อล้าง');
+  if(m === 'measure') showReadout('Click the map to start measuring - right-click to clear');
 }
 function showReadout(html){ $('readout').innerHTML = html; $('readout').classList.add('on'); }
 
@@ -495,7 +496,7 @@ map.on('mousemove', e => {
   dragRect.setBounds(L.latLngBounds(dragStart, e.latlng));
   const b = dragRect.getBounds();
   const km2 = geoArea([b.getNorthWest(), b.getNorthEast(), b.getSouthEast(), b.getSouthWest()]) / 1e6;
-  showReadout('ขนาดพื้นที่ <b>' + num(km2, 3) + '</b> ตร.กม.');
+  showReadout('Area size <b>' + num(km2, 3) + '</b> km&sup2;');
 });
 function finishDraw(){
   if(S.mode !== 'draw' || !dragStart || !dragRect) return;
@@ -503,7 +504,7 @@ function finishDraw(){
   dragStart = null;
   if(b.getNorth()-b.getSouth() < 1e-5 || b.getEast()-b.getWest() < 1e-5){
     aoiLayer.removeLayer(dragRect); dragRect = null;
-    showReadout('กรอบเล็กเกินไป - ลากให้กว้างกว่านี้'); return;
+    showReadout('Box is too small - drag a wider one'); return;
   }
   setAOI(b.getSouth(), b.getWest(), b.getNorth(), b.getEast(), false);
   setMode(null);
@@ -521,8 +522,8 @@ function setAOI(minLat, minLng, maxLat, maxLng, fly){
   if(fly) map.fitBounds([[minLat,minLng],[maxLat,maxLng]], {padding:[60,60]});
   if(!$('title').value.trim()){
     const t = new Date();
-    $('title').value = 'งานสำรวจ ' + t.toLocaleDateString('th-TH') + ' ' +
-      t.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+    $('title').value = 'Survey ' + t.toLocaleDateString('en-GB') + ' ' +
+      t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   }
   refreshForm();
 }
@@ -537,21 +538,21 @@ function drawAOI(a){
 function refreshForm(){
   const box = $('aoi_box'), a = S.aoi;
   if(!a){
-    box.className = 'aoi-box'; box.textContent = 'ยังไม่ได้เลือกพื้นที่';
+    box.className = 'aoi-box'; box.textContent = 'No area selected yet';
     $('s1').classList.remove('ready'); $('btn_run').disabled = true; return;
   }
   const km2 = geoArea([L.latLng(a.max_lat,a.min_lng), L.latLng(a.max_lat,a.max_lng),
                        L.latLng(a.min_lat,a.max_lng), L.latLng(a.min_lat,a.min_lng)])/1e6;
   const tiles = tileCount(a, +$('zoom').value);
   box.className = 'aoi-box set';
-  box.innerHTML = '<b>พื้นที่ที่เลือก</b>' +
+  box.innerHTML = '<b>Selected area</b>' +
     '<div class="aoi-grid">' +
-      '<span>มุมล่างซ้าย</span><span>' + a.min_lat + ', ' + a.min_lng + '</span>' +
-      '<span>มุมบนขวา</span><span>' + a.max_lat + ', ' + a.max_lng + '</span>' +
-      '<span>ขนาด</span><span>' + num(km2,3) + ' ตร.กม.</span>' +
-      '<span>จำนวน tile</span><span>' + tiles + ' / 100</span>' +
+      '<span>South-west</span><span>' + a.min_lat + ', ' + a.min_lng + '</span>' +
+      '<span>North-east</span><span>' + a.max_lat + ', ' + a.max_lng + '</span>' +
+      '<span>Size</span><span>' + num(km2,3) + ' km&sup2;</span>' +
+      '<span>Tiles</span><span>' + tiles + ' / 100</span>' +
     '</div>' +
-    (tiles > 100 ? '<div class="alert alert-warn">พื้นที่ใหญ่เกินขีดจำกัด (100 tile) - ลดขนาดกรอบหรือลดระดับซูมลง</div>' : '');
+    (tiles > 100 ? '<div class="alert alert-warn">Area is over the limit (100 tiles) - shrink the box or lower the zoom level</div>' : '');
   $('s1').classList.add('ready');
   $('s2').classList.add('ready');
   $('btn_run').disabled = tiles > 100;
@@ -571,17 +572,17 @@ map.on('click', e => {
 
   let dist = 0;
   for(let i=1;i<measPts.length;i++) dist += measPts[i-1].distanceTo(measPts[i]);
-  let html = 'ระยะรวม <b>' + (dist<1000 ? num(dist,1)+' ม.' : num(dist/1000,3)+' กม.') + '</b>';
+  let html = 'Total distance <b>' + (dist<1000 ? num(dist,1)+' m' : num(dist/1000,3)+' km') + '</b>';
   if(measPts.length >= 3){
     L.polygon(measPts,{color:'#38bdf8',weight:1,fillOpacity:.12}).addTo(measLayer);
-    html += ' &nbsp;&middot;&nbsp; พื้นที่ <b>' + num(geoArea(measPts),1) + '</b> ตร.ม.';
+    html += ' &nbsp;&middot;&nbsp; area <b>' + num(geoArea(measPts),1) + '</b> m&sup2;';
   }
-  showReadout(html + '<br><span style="color:var(--muted-2);font-size:11px">คลิกขวาเพื่อล้าง &middot; Esc เพื่อออก</span>');
+  showReadout(html + '<br><span style="color:var(--muted-2);font-size:11px">Right-click to clear &middot; Esc to exit</span>');
 });
 map.on('contextmenu', () => {
   if(S.mode !== 'measure') return;
   measPts = []; measLayer.clearLayers();
-  showReadout('คลิกบนแผนที่เพื่อเริ่มวัด');
+  showReadout('Click the map to start measuring');
 });
 
 /* =========================================================
@@ -605,18 +606,18 @@ function syncLayers(){
    ========================================================= */
 async function submitJob(){
   const title = $('title').value.trim();
-  if(!S.aoi) return toast('กรุณาเลือกพื้นที่ก่อน', 'err');
-  if(!title) return toast('กรุณาตั้งชื่องาน', 'err');
+  if(!S.aoi) return toast('Select an area first', 'err');
+  if(!title) return toast('Give the job a title', 'err');
 
   const payload = Object.assign({title:title, zoom:+$('zoom').value}, S.aoi);
   $('btn_run').disabled = true;
   try{
     const res = await fetch('/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
     const data = await res.json();
-    if(!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'สั่งรันไม่สำเร็จ');
-    toast('เริ่มงาน "' + title + '" แล้ว', 'ok');
+    if(!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not start the job');
+    toast('Started "' + title + '"', 'ok');
     S.currentTid = data.tid;
-    $('pill_job').innerHTML = 'งานปัจจุบัน: <b>' + title + '</b>';
+    $('pill_job').innerHTML = 'Current job: <b>' + title + '</b>';
     $('s3').classList.add('ready');
     loadTasks(); trackProgress(data.tid, title);
   }catch(err){
@@ -636,8 +637,8 @@ function trackProgress(tid, title){
         clearInterval(S.pollTimer); S.pollTimer = null;
         $('btn_run').disabled = false;
         await loadTasks();
-        if(p.state === 'completed'){ toast('งาน "' + title + '" เสร็จแล้ว', 'ok'); openTask(tid); }
-        else toast('งาน "' + title + '" ล้มเหลว', 'err');
+        if(p.state === 'completed'){ toast('Job "' + title + '" finished', 'ok'); openTask(tid); }
+        else toast('Job "' + title + '" failed', 'err');
       }
     }catch(e){ /* เงียบไว้ แล้วลองใหม่รอบหน้า */ }
   };
@@ -650,7 +651,7 @@ function stepDuration(step){
   const sec = (end - new Date(step.started_at)) / 1000;
   if(sec < 0 || !isFinite(sec)) return '';
   return '<span class="step-time">' +
-    (sec < 60 ? sec.toFixed(1) + ' วิ' : Math.floor(sec/60) + ' น. ' + Math.round(sec%60) + ' วิ') +
+    (sec < 60 ? sec.toFixed(1) + ' s' : Math.floor(sec/60) + ' min ' + Math.round(sec%60) + ' s') +
     '</span>';
 }
 
@@ -659,7 +660,7 @@ function renderStepper(p){
   let html = p.steps.map(s => {
     // retry_count > 0 แปลว่า step นี้เคยล้มเหลวแล้วกำลังลองใหม่ ตามกฎ retry สูงสุด 5 ครั้ง
     const retry = s.retry_count > 0
-      ? ' <span style="color:var(--warn)">(ลองใหม่ ' + s.retry_count + '/5)</span>' : '';
+      ? ' <span style="color:var(--warn)">(retry ' + s.retry_count + '/5)</span>' : '';
     // log มีเฉพาะ step ที่เริ่มทำงานไปแล้ว และเฉพาะตอนที่ Airflow เป็นคนรัน
     const log = (S.airflowMode && s.started_at)
       ? `<a class="log-link" href="#" onclick="openLog('${s.step_name}',${s.retry_count + 1});return false">log</a>`
@@ -672,11 +673,11 @@ function renderStepper(p){
 
   const failed = p.steps.find(s => s.status === 'failed');
   if(failed && failed.error_msg){
-    html += '<div class="alert alert-warn" style="margin-top:8px"><b>สาเหตุ:</b><br>' +
+    html += '<div class="alert alert-warn" style="margin-top:8px"><b>Cause:</b><br>' +
             esc(failed.error_msg) + '</div>';
   }
   if(p.state === 'failed'){
-    html += `<div class="rerun-row"><button class="btn btn-ghost btn-sm" onclick="rerunTask('${p.tid}')">สั่งรันใหม่ตั้งแต่ต้น</button></div>`;
+    html += `<div class="rerun-row"><button class="btn btn-ghost btn-sm" onclick="rerunTask('${p.tid}')">Run again from the start</button></div>`;
   }
   $('stepper').innerHTML = html;
 }
@@ -686,12 +687,12 @@ function renderStepper(p){
    ========================================================= */
 async function rerunTask(tid){
   const t = S.tasks.find(x => x.tid === tid);
-  if(!confirm(`สั่งรันงาน "${(t && t.title) || tid}" ใหม่ตั้งแต่ต้น?\nผลลัพธ์เดิมของงานนี้จะถูกล้างทิ้ง`)) return;
+  if(!confirm(`Run "${(t && t.title) || tid}" again from the start?\nThe existing results for this job will be cleared.`)) return;
   try{
     const res = await fetch('/tasks/' + tid + '/rerun', {method:'POST'});
     const data = await res.json();
-    if(!res.ok) throw new Error(data.detail || 'สั่งรันใหม่ไม่สำเร็จ');
-    toast('สั่งรันใหม่แล้ว', 'ok');
+    if(!res.ok) throw new Error(data.detail || 'Could not restart the job');
+    toast('Restarted', 'ok');
     S.currentTid = tid;
     switchTab('new');
     trackProgress(tid, (t && t.title) || tid);
@@ -710,7 +711,7 @@ function openLog(stepName, attempts){
   for(let i = attempts; i >= 1; i--){
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = 'ครั้งที่ ' + i;
+    opt.textContent = 'Attempt ' + i;
     sel.appendChild(opt);
   }
   sel.style.display = attempts > 1 ? '' : 'none';
@@ -722,12 +723,12 @@ function closeLog(){ $('logbox').classList.remove('on'); }
 
 async function loadLog(){
   const body = $('log_body');
-  body.textContent = 'กำลังโหลด...';
+  body.textContent = 'Loading...';
   try{
     const res = await fetch('/tasks/' + S.currentTid + '/steps/' + S.logStep +
                             '/log?attempt=' + $('log_attempt').value);
     const data = await res.json();
-    if(!res.ok) throw new Error(data.detail || 'อ่าน log ไม่ได้');
+    if(!res.ok) throw new Error(data.detail || 'Could not read the log');
     // เน้นบรรทัดที่เป็นข้อผิดพลาดให้หาเจอง่าย
     body.innerHTML = esc(data.log).replace(
       /^(.*(ERROR|Traceback|Exception|Error:).*)$/gm, '<span class="hl">$1</span>');
@@ -759,15 +760,15 @@ function renderTasks(){
 
   if(!list.length){
     box.innerHTML = '<div class="empty">' +
-      (S.tasks.length ? 'ไม่พบงานที่ค้นหา' : 'ยังไม่มีงานในระบบ<br>เริ่มจากแท็บ &ldquo;สร้างงานใหม่&rdquo;') +
+      (S.tasks.length ? 'No jobs match your search' : 'No jobs yet<br>Start from the &ldquo;New job&rdquo; tab') +
       '</div>';
     return;
   }
 
   box.innerHTML = list.map(t => {
-    const st = t.state === 'completed' ? ['b-done','เสร็จสิ้น']
-             : t.state === 'failed'    ? ['b-fail','ล้มเหลว']
-             : ['b-run','กำลังประมวลผล'];
+    const st = t.state === 'completed' ? ['b-done','Completed']
+             : t.state === 'failed'    ? ['b-fail','Failed']
+             : ['b-run','Running'];
     const r = t.result;
     return '<div class="job ' + (t.tid===S.currentTid?'on':'') + '" onclick="openTask(\'' + t.tid + '\')">' +
       '<div class="job-top">' +
@@ -775,18 +776,18 @@ function renderTasks(){
         '<div class="badge ' + st[0] + '">' + st[1] + '</div>' +
       '</div>' +
       '<div class="job-meta">' +
-        '<div><b>' + num(r ? r.panel_count : null) + '</b> แผง</div>' +
-        '<div><b>' + num(r ? r.surface_area : null) + '</b> ตร.ม.</div>' +
+        '<div><b>' + num(r ? r.panel_count : null) + '</b> panels</div>' +
+        '<div><b>' + num(r ? r.surface_area : null) + '</b> m&sup2;</div>' +
         '<div style="color:var(--muted-2)">' + t.tid.slice(0,8) + '</div>' +
       '</div>' +
       '<div class="job-acts" onclick="event.stopPropagation()">' +
         '<a class="icon-btn" href="/tasks/' + t.tid + '/geojson">GeoJSON</a>' +
-        '<a class="icon-btn" href="/tasks/' + t.tid + '/satellite">ภาพ TIF</a>' +
+        '<a class="icon-btn" href="/tasks/' + t.tid + '/satellite">TIF image</a>' +
         '<a class="icon-btn" href="/tasks/' + t.tid + '/overlay">Overlay</a>' +
-        '<button class="icon-btn" onclick="reuseAOI(\'' + t.tid + '\')">ใช้พื้นที่นี้</button>' +
+        '<button class="icon-btn" onclick="reuseAOI(\'' + t.tid + '\')">Reuse area</button>' +
         (t.state === 'failed'
-          ? `<button class="icon-btn" onclick="rerunTask('${t.tid}')">รันใหม่</button>` : '') +
-        '<button class="icon-btn danger" onclick="removeTask(\'' + t.tid + '\')">ลบ</button>' +
+          ? `<button class="icon-btn" onclick="rerunTask('${t.tid}')">Rerun</button>` : '') +
+        '<button class="icon-btn danger" onclick="removeTask(\'' + t.tid + '\')">Delete</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -800,16 +801,16 @@ function reuseAOI(tid){
   $('title').value = '';
   switchTab('new');
   refreshForm();
-  toast('นำพิกัดของ "' + t.title + '" มาใช้แล้ว');
+  toast('Using the area from "' + t.title + '"');
 }
 
 async function removeTask(tid){
   const t = S.tasks.find(x => x.tid === tid);
   const label = t ? t.title : tid;
-  if(!confirm('ต้องการลบงาน "' + label + '" และไฟล์ทั้งหมดใช่หรือไม่?')) return;
+  if(!confirm('Delete job "' + label + '" and all of its files?')) return;
   await fetch('/tasks/' + tid, {method:'DELETE'});
   if(S.currentTid === tid){ S.currentTid = null; clearResult(); }
-  toast('ลบงาน "' + label + '" แล้ว');
+  toast('Deleted "' + label + '"');
   loadTasks();
 }
 
@@ -825,11 +826,11 @@ async function openTask(tid){
     try{ task = await (await fetch('/tasks/' + tid)).json(); }catch(e){ return; }
   }
 
-  $('pill_job').innerHTML = 'งานปัจจุบัน: <b>' + esc(task.title) + '</b>';
+  $('pill_job').innerHTML = 'Current job: <b>' + esc(task.title) + '</b>';
 
   const r = task.result;
-  $('v_area').innerHTML   = num(r ? r.surface_area : null) + '<small>ตร.ม.</small>';
-  $('v_panels').innerHTML = num(r ? r.panel_count : null) + '<small>แผง</small>';
+  $('v_area').innerHTML   = num(r ? r.surface_area : null) + '<small>m&sup2;</small>';
+  $('v_panels').innerHTML = num(r ? r.panel_count : null) + '<small>panels</small>';
   $('v_cap').innerHTML    = '—';  // Task_Result ไม่ได้เก็บ kWp จึงรวมจาก GeoJSON แทน
   $('v_energy').innerHTML = num(r ? r.power_generation/1000 : null, 1) + '<small>MWh</small>';
 
@@ -881,11 +882,11 @@ function renderDetections(gj){
     style: {color:'#22d3ee', weight:1.5, fillColor:'#06b6d4'},
     onEachFeature: (f, layer) => {
       const p = f.properties || {};
-      layer.bindPopup('<b>แผงโซลาร์เซลล์</b><br>' +
-        'พื้นที่ ' + num(p.area_sqm,2) + ' ตร.ม.<br>' +
-        'ประมาณ ' + num(p.estimated_panels) + ' แผง<br>' +
-        'กำลังผลิต ' + num(p.capacity_kwp,2) + ' kWp<br>' +
-        'ต่อปี ' + num(p.annual_generation_kwh) + ' kWh');
+      layer.bindPopup('<b>Solar panels</b><br>' +
+        'Area ' + num(p.area_sqm,2) + ' m&sup2;<br>' +
+        'About ' + num(p.estimated_panels) + ' panels<br>' +
+        'Capacity ' + num(p.capacity_kwp,2) + ' kWp<br>' +
+        'Per year ' + num(p.annual_generation_kwh) + ' kWh');
       layer.on('click', () => highlight(f.__i));
     }
   }).addTo(detLayer);
@@ -903,10 +904,10 @@ function renderDetections(gj){
   $('det_list').innerHTML = order.map(o => {
     const p = feats[o.i].properties || {};
     return '<div class="det" id="det_' + o.i + '" onclick="zoomTo(' + o.i + ')">' +
-      '<div class="det-top"><span>แปลงที่ ' + (o.i+1) + '</span><b>' + num(o.a,1) + ' ตร.ม.</b></div>' +
-      '<div class="det-sub"><span>' + num(p.estimated_panels) + ' แผง</span><span>' + num(p.capacity_kwp,2) + ' kWp</span></div>' +
+      '<div class="det-top"><span>Polygon ' + (o.i+1) + '</span><b>' + num(o.a,1) + ' m&sup2;</b></div>' +
+      '<div class="det-sub"><span>' + num(p.estimated_panels) + ' panels</span><span>' + num(p.capacity_kwp,2) + ' kWp</span></div>' +
     '</div>';
-  }).join('') || '<div class="empty">ไม่พบแผงโซลาร์เซลล์ในพื้นที่นี้</div>';
+  }).join('') || '<div class="empty">No solar panels found in this area</div>';
 
   $('drawer').classList.toggle('on', feats.length > 0);
   syncLayers();
@@ -937,7 +938,7 @@ function closeDrawer(){ $('drawer').classList.remove('on'); }
 function clearResult(){
   detLayer.clearLayers(); detGeo = null; S.geojson = null; closeDrawer();
   ovlLayer.clearLayers(); ovlImage = null; $('l_ovl').disabled = true;
-  $('pill_job').textContent = 'ยังไม่ได้เลือกงาน';
+  $('pill_job').textContent = 'No job selected';
   ['v_area','v_panels','v_cap','v_energy'].forEach(id => { $(id).innerHTML = '—'; });
 }
 
@@ -978,11 +979,11 @@ function toggleGateMode(){
   $('gate_name_row').style.display = reg ? '' : 'none';
   $('gate_name').required = reg;
   $('gate_sub').textContent = reg
-    ? 'สร้างบัญชีใหม่ งานที่คุณสร้างจะเห็นได้เฉพาะบัญชีนี้'
-    : 'เข้าสู่ระบบเพื่อดูและสร้างงานตรวจจับของคุณ';
-  $('gate_submit').textContent = reg ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ';
-  $('gate_switch_text').textContent = reg ? 'มีบัญชีอยู่แล้ว?' : 'ยังไม่มีบัญชี?';
-  $('gate_switch_btn').textContent = reg ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก';
+    ? 'Create a new account. Jobs you create are visible only to this account.'
+    : 'Sign in to view and create your detection jobs';
+  $('gate_submit').textContent = reg ? 'Create account' : 'Sign in';
+  $('gate_switch_text').textContent = reg ? 'Already have an account?' : 'No account yet?';
+  $('gate_switch_btn').textContent = reg ? 'Sign in' : 'Create one';
   $('gate_password').autocomplete = reg ? 'new-password' : 'current-password';
   gateError('');
 }
@@ -998,10 +999,10 @@ async function submitGate(){
   const password = $('gate_password').value;
   const name = $('gate_name').value.trim();
 
-  if(!email || !password) return gateError('กรอกอีเมลและรหัสผ่านให้ครบ');
+  if(!email || !password) return gateError('Enter both your email and password');
   if(gateMode === 'register'){
-    if(!name) return gateError('กรอกชื่อด้วย');
-    if(password.length < 8) return gateError('รหัสผ่านต้องยาวอย่างน้อย 8 ตัว');
+    if(!name) return gateError('Enter your name as well');
+    if(password.length < 8) return gateError('Password must be at least 8 characters');
   }
 
   const body = gateMode === 'register' ? {name, email, password} : {email, password};
@@ -1014,9 +1015,9 @@ async function submitGate(){
     if(!res.ok){
       // ข้อผิดพลาดจาก pydantic จะมาเป็น array ของ object
       const detail = Array.isArray(data.detail)
-        ? (data.detail[0] && data.detail[0].msg) || 'ข้อมูลไม่ถูกต้อง'
+        ? (data.detail[0] && data.detail[0].msg) || 'Invalid details'
         : data.detail;
-      throw new Error(detail || 'เข้าสู่ระบบไม่สำเร็จ');
+      throw new Error(detail || 'Sign-in failed');
     }
     enterApp(data);
   }catch(err){
@@ -1038,7 +1039,7 @@ function enterApp(user){
   $('gate').classList.remove('on');
   $('gate_password').value = '';
   $('user_chip').innerHTML = '<b>' + esc(user.name) + '</b>' +
-    '<button class="hlink" style="padding:4px 8px" onclick="logout()">ออกจากระบบ</button>';
+    '<button class="hlink" style="padding:4px 8px" onclick="logout()">Sign out</button>';
   detectExecutor().then(loadTasks);
 }
 

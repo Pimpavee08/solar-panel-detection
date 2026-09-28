@@ -33,8 +33,8 @@ from models import (
 app = FastAPI(
     title="Solar Panel Detection Pipeline API",
     description=(
-        "REST API สำหรับสร้าง Task ตรวจจับแผงโซลาร์เซลล์"
-        " ดึงภาพดาวเทียม รันโมเดล และสรุปกำลังการผลิต"
+        "REST API for creating solar panel detection tasks:"
+        " fetch satellite imagery, run the model, summarise the capacity"
     ),
     version="2.0.0",
 )
@@ -202,7 +202,7 @@ def get_task_or_404(session, tid: str, uid: str) -> Task:
   if task is None or task.uid != uid:
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"ไม่พบ Task รหัส '{tid}'",
+        detail=f"Task '{tid}' not found",
     )
   return task
 
@@ -212,11 +212,11 @@ def get_task_or_404(session, tid: str, uid: str) -> Task:
 # -------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse, tags=["General"])
 def read_root():
-  """หน้าเว็บ Dashboard (ไฟล์อยู่ที่ static/dashboard.html)"""
+  """The dashboard page (served from static/dashboard.html)."""
   if not os.path.exists(DASHBOARD_PATH):
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"ไม่พบไฟล์หน้าเว็บที่ {DASHBOARD_PATH}",
+        detail=f"Dashboard file not found at {DASHBOARD_PATH}",
     )
   with open(DASHBOARD_PATH, encoding="utf-8") as f:
     return HTMLResponse(f.read())
@@ -224,7 +224,7 @@ def read_root():
 
 @app.get("/health", tags=["General"])
 def health():
-  """บอกว่าตอนนี้ pipeline ถูกรันด้วยอะไร และ Airflow ติดต่อได้หรือไม่"""
+  """Which executor runs the pipeline, and whether Airflow is reachable."""
   info = airflow_client.health()
   return {
       "executor": "airflow" if info["enabled"] else "background",
@@ -237,7 +237,7 @@ def health():
 # -------------------------------------------------------------
 @app.post("/auth/register", response_model=UserResponse, tags=["Auth"])
 def register(payload: RegisterRequest, request: Request):
-  """สมัครสมาชิกแล้วเข้าสู่ระบบให้เลย"""
+  """Create an account and sign the new user in straight away."""
   auth.check_login_rate(request)
   try:
     user = auth.create_user(payload.name, payload.email, payload.password)
@@ -258,7 +258,7 @@ def login(payload: LoginRequest, request: Request):
   if user is None:
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+        detail="Incorrect email or password",
     )
   auth.clear_login_attempts(request)
   auth.login_session(request, user["uid"])
@@ -268,7 +268,7 @@ def login(payload: LoginRequest, request: Request):
 @app.post("/auth/logout", tags=["Auth"])
 def logout(request: Request):
   auth.logout_session(request)
-  return {"message": "ออกจากระบบแล้ว"}
+  return {"message": "Signed out"}
 
 
 @app.get("/auth/me", response_model=UserResponse, tags=["Auth"])
@@ -285,16 +285,16 @@ def create_task(
     background_tasks: BackgroundTasks,
     user: dict = Depends(auth.current_user),
 ):
-  """สร้าง Task ใหม่ พร้อม Task_Step ครบ 4 แถว แล้วสั่งรัน pipeline เบื้องหลัง"""
+  """Create a Task with its four Task_Step rows, then run the pipeline."""
   if payload.min_lat >= payload.max_lat:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="ละติจูดสูงสุด (max_lat) ต้องมากกว่าละติจูดต่ำสุด (min_lat)",
+        detail="max_lat must be greater than min_lat",
     )
   if payload.min_lng >= payload.max_lng:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="ลองจิจูดสูงสุด (max_lng) ต้องมากกว่าลองจิจูดต่ำสุด (min_lng)",
+        detail="max_lng must be greater than min_lng",
     )
 
   title = payload.title.strip()
@@ -320,7 +320,7 @@ def create_task(
       pipeline.mark_step_failed(tid, STEP_NAMES[0], str(exc))
       raise HTTPException(
           status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-          detail=f"สั่งงาน Airflow ไม่สำเร็จ: {exc}",
+          detail=f"Could not trigger Airflow: {exc}",
       ) from exc
   else:
     executor = "background"
@@ -332,7 +332,7 @@ def create_task(
       "status": "generating_config:pending",
       "executor": executor,
       "dag_run_id": dag_run_id,
-      "message": f"สร้าง Task '{title}' แล้ว ติดตามสถานะที่ GET /tasks/{tid}/progress",
+      "message": f"Task '{title}' created. Track it at GET /tasks/{tid}/progress",
   }
 
 
@@ -359,7 +359,7 @@ def get_task(tid: str, user: dict = Depends(auth.current_user)):
     "/tasks/{tid}/progress", response_model=ProgressResponse, tags=["Tasks"]
 )
 def get_progress(tid: str, user: dict = Depends(auth.current_user)):
-  """ความคืบหน้าราย step อ่านจากตาราง Task_Step โดยตรง"""
+  """Per-step progress, read straight from the Task_Step table."""
   with session_scope() as session:
     task = get_task_or_404(session, tid, user["uid"])
     steps = (
@@ -397,7 +397,7 @@ def delete_task(tid: str, user: dict = Depends(auth.current_user)):
 
   disk_deleted = pipeline.delete_task_files(tid)
   return {
-      "message": f"ลบ Task '{title}' เรียบร้อย",
+      "message": f"Task '{title}' deleted",
       "database_deleted": True,
       "disk_files_deleted": disk_deleted,
   }
@@ -410,15 +410,15 @@ def step_log(
     attempt: int = 1,
     user: dict = Depends(auth.current_user),
 ):
-  """ดึง log ของขั้นตอนหนึ่งจาก Airflow มาแสดงในหน้าเว็บ
+  """Fetch one step's log from Airflow and show it in the dashboard.
 
-  ตรวจสิทธิ์เจ้าของก่อนเสมอ เพราะ endpoint นี้ส่งต่อข้อมูลจาก Airflow
-  ซึ่งตัวมันเองไม่รู้จักผู้ใช้เลย
+  Ownership is checked first every time, because this endpoint relays data
+  from Airflow, which knows nothing about users.
   """
   if step_name not in STEP_NAMES:
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"ไม่มีขั้นตอนชื่อ '{step_name}'",
+        detail=f"There is no step named '{step_name}'",
     )
 
   with session_scope() as session:
@@ -428,12 +428,12 @@ def step_log(
   if not airflow_client.is_enabled():
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="โหมดนี้รัน pipeline ในโปรเซสของเว็บ จึงไม่มี log แยกราย step",
+        detail="This mode runs the pipeline inside the web process, so there is no per-step log",
     )
   if not dag_run_id:
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="งานนี้ไม่ได้ถูกสั่งผ่าน Airflow จึงไม่มี log",
+        detail="This job was not triggered through Airflow, so it has no log",
     )
 
   try:
@@ -452,13 +452,13 @@ def rerun_task(
     background_tasks: BackgroundTasks,
     user: dict = Depends(auth.current_user),
 ):
-  """สั่งรัน Task เดิมใหม่ตั้งแต่ต้น โดยใช้พิกัดและการตั้งค่าเดิม"""
+  """Run an existing Task again from the start, reusing its area and settings."""
   with session_scope() as session:
     task = get_task_or_404(session, tid, user["uid"])
     if derive_state(task.status) == STATUS_RUNNING:
       raise HTTPException(
           status_code=status.HTTP_409_CONFLICT,
-          detail="งานนี้กำลังทำงานอยู่ รอให้จบก่อน",
+          detail="This job is still running; wait for it to finish",
       )
 
   pipeline.reset_task_steps(tid)
@@ -470,7 +470,7 @@ def rerun_task(
       pipeline.mark_step_failed(tid, STEP_NAMES[0], str(exc))
       raise HTTPException(
           status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-          detail=f"สั่งงาน Airflow ไม่สำเร็จ: {exc}",
+          detail=f"Could not trigger Airflow: {exc}",
       ) from exc
     _save_dag_run_id(tid, dag_run_id)
     return {"tid": tid, "executor": "airflow", "dag_run_id": dag_run_id}
@@ -491,7 +491,7 @@ def download_geojson(tid: str, user: dict = Depends(auth.current_user)):
   if not os.path.exists(path):
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="ยังไม่มีไฟล์ GeoJSON (Task อาจกำลังทำงานอยู่หรือล้มเหลว)",
+        detail="No GeoJSON yet (the task may still be running, or it failed)",
     )
   return FileResponse(
       path=path,
@@ -502,7 +502,7 @@ def download_geojson(tid: str, user: dict = Depends(auth.current_user)):
 
 @app.get("/tasks/{tid}/overlay", tags=["Downloads"])
 def download_overlay(tid: str, user: dict = Depends(auth.current_user)):
-  """ภาพถ่ายดาวเทียมที่วาดขอบเขตแผงที่ตรวจพบทับไว้แล้ว"""
+  """The satellite image with the detected panel outlines drawn on top."""
   with session_scope() as session:
     get_task_or_404(session, tid, user["uid"])
 
@@ -510,7 +510,7 @@ def download_overlay(tid: str, user: dict = Depends(auth.current_user)):
   if not os.path.exists(path):
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="ยังไม่มีภาพ overlay ของ Task นี้",
+        detail="This task has no overlay image yet",
     )
   return FileResponse(
       path=path, media_type="image/png", filename=f"{tid}-overlay.png"
@@ -519,10 +519,11 @@ def download_overlay(tid: str, user: dict = Depends(auth.current_user)):
 
 @app.get("/tasks/{tid}/overlay/meta", tags=["Downloads"])
 def overlay_meta(tid: str, user: dict = Depends(auth.current_user)):
-  """ขอบเขตของภาพ overlay ในพิกัด WGS84 สำหรับวางเป็น image layer บนแผนที่
+  """Bounds of the overlay image in WGS84, for placing it as a map layer.
 
-  ขอบเขตนี้กว้างกว่า bbox ที่ผู้ใช้เลือกเล็กน้อย เพราะภาพถูกต่อจาก tile
-  ที่ปัดขอบออกไป จึงใช้ค่าจากไฟล์ภาพจริง ไม่ใช่ค่าใน Task
+  They are slightly wider than the bbox the user picked, because the image is
+  stitched from whole tiles, so they come from the image file itself rather
+  than from the Task row.
   """
   with session_scope() as session:
     get_task_or_404(session, tid, user["uid"])
@@ -531,7 +532,7 @@ def overlay_meta(tid: str, user: dict = Depends(auth.current_user)):
   if not os.path.exists(path):
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="ยังไม่มีภาพ overlay ของ Task นี้",
+        detail="This task has no overlay image yet",
     )
   with open(path, encoding="utf-8") as f:
     meta = json.load(f)
@@ -548,7 +549,7 @@ def download_satellite(tid: str, user: dict = Depends(auth.current_user)):
   if not os.path.exists(path):
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="ยังไม่มีไฟล์ภาพถ่ายดาวเทียมของ Task นี้",
+        detail="This task has no satellite image yet",
     )
   return FileResponse(
       path=path, media_type="image/tiff", filename=f"{tid}-satellite.tif"

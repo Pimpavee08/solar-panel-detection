@@ -19,9 +19,9 @@ if hasattr(sys.stdout, "reconfigure"):
 
 def parse_args():
   parser = argparse.ArgumentParser(
-      description="ตรวจจับแผงโซลาร์เซลล์จากภาพถ่ายดาวเทียมในพื้นที่ที่กำหนด"
+      description="Detect solar panels from satellite imagery over a given area"
   )
-  parser.add_argument("--title", default="งานทดสอบ SIIT รังสิต")
+  parser.add_argument("--title", default="SIIT Rangsit test job")
   parser.add_argument(
       "--bbox",
       nargs=4,
@@ -45,10 +45,10 @@ def print_report(tid: str) -> None:
     result = session.query(TaskResult).filter_by(tid=tid).one_or_none()
 
     print("\n" + "=" * 56)
-    print(f" รายงานผล: {task.title}")
+    print(f" Report: {task.title}")
     print("=" * 56)
     print(f" - Task ID:  {tid}")
-    print(f" - สถานะ:    {task.status}\n")
+    print(f" - Status:   {task.status}\n")
 
     for step in steps:
       mark = "OK  " if step.status == STATUS_COMPLETED else "FAIL"
@@ -58,16 +58,16 @@ def print_report(tid: str) -> None:
         print(f"     -> {step.error_msg}")
 
     if result is None:
-      print("\n ยังไม่มีผลลัพธ์ — Task ยังไม่ผ่านขั้น parse_result")
+      print("\n No result yet - the task has not passed parse_result")
       print("=" * 56)
       return
 
     print()
-    print(f" - พื้นที่ผิวแผงรวม:     {result.surface_area:,.2f} ตร.ม.")
-    print(f" - ประมาณการจำนวนแผง:   {result.panel_count:,} แผง")
-    print(f" - ไฟฟ้าที่ผลิตได้ต่อปี:  {result.power_generation:,.2f} kWh/ปี")
+    print(f" - Total panel area:    {result.surface_area:,.2f} m2")
+    print(f" - Estimated panels:    {result.panel_count:,} panels")
+    print(f" - Annual generation:   {result.power_generation:,.2f} kWh/year")
     print(f" - GeoJSON:             {pipeline.geojson_path(tid)}")
-    print(f" - ภาพ overlay:          {result.overlay_image_path or '(ไม่ได้สร้าง)'}")
+    print(f" - Overlay image:       {result.overlay_image_path or '(not created)'}")
     print("=" * 56)
 
 
@@ -84,6 +84,6 @@ if __name__ == "__main__":
       max_lng=max_lng,
       zoom=args.zoom,
   )
-  print(f"สร้าง Task {tid} แล้ว กำลังรัน pipeline...")
+  print(f"Task {tid} created. Running the pipeline...")
   pipeline.run_task(tid)
   print_report(tid)

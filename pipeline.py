@@ -277,7 +277,7 @@ def run_step(tid: str, step_name: str) -> None:
   """รัน step หนึ่งขั้นแบบไม่ retry — ให้ Airflow เป็นคนจัดการ retry เอง"""
   params = load_task_params(tid)
   if params is None:
-    raise RuntimeError(f"ไม่พบ Task {tid} ในฐานข้อมูล")
+    raise RuntimeError(f"Task {tid} was not found in the database")
   STEP_FUNCTIONS[step_name](tid, params)
 
 
@@ -327,7 +327,7 @@ def _step_parse_result(tid: str, task: dict) -> None:
       job_name=tid,
   )
   if summary.get("status") != "completed":
-    raise RuntimeError(summary.get("message", "แปลงผลลัพธ์ไม่สำเร็จ"))
+    raise RuntimeError(summary.get("message", "Could not parse the results"))
 
   # ภาพ overlay เป็นส่วนแสดงผล ไม่ใช่ตัวเลขผลลัพธ์ ถ้าวาดไม่สำเร็จจึงไม่ควร
   # ทำให้ทั้ง Task ล้มเหลวแล้ว retry ใหม่ทั้งชุด — บันทึกเป็น None แล้วไปต่อ
@@ -336,7 +336,7 @@ def _step_parse_result(tid: str, task: dict) -> None:
     create_overlay(satellite_path(tid), geojson_path(tid), overlay_path(tid))
     overlay = overlay_path(tid)
   except Exception as exc:  # noqa: BLE001
-    print(f"[pipeline] สร้างภาพ overlay ไม่สำเร็จ: {type(exc).__name__}: {exc}")
+    print(f"[pipeline] could not build the overlay image: {type(exc).__name__}: {exc}")
 
   _save_result(tid, summary, overlay)
 
@@ -364,7 +364,7 @@ def _run_step_with_retry(tid: str, step_name: str, task: dict) -> bool:
     except Exception as exc:  # noqa: BLE001 — ต้องจับทุกชนิดเพื่อบันทึกลง DB
       retry_count += 1
       message = f"{type(exc).__name__}: {exc}"
-      print(f"[pipeline] {tid} step '{step_name}' ล้มเหลวครั้งที่ {retry_count}")
+      print(f"[pipeline] {tid} step '{step_name}' failed, attempt {retry_count}")
       traceback.print_exc()
 
       if retry_count >= MAX_RETRY:
@@ -382,15 +382,15 @@ def run_task(tid: str) -> None:
   """เดิน Task ตั้งแต่ step แรกจนจบ หยุดทันทีเมื่อมี step ใด failed"""
   task = load_task_params(tid)
   if task is None:
-    print(f"[pipeline] ไม่พบ Task {tid}")
+    print(f"[pipeline] Task {tid} not found")
     return
 
   for step_name in STEP_NAMES:
     if not _run_step_with_retry(tid, step_name, task):
-      print(f"[pipeline] Task {tid} หยุดที่ step '{step_name}'")
+      print(f"[pipeline] Task {tid} stopped at step '{step_name}'")
       return
 
-  print(f"[pipeline] Task {tid} เสร็จสมบูรณ์")
+  print(f"[pipeline] Task {tid} finished")
 
 
 def delete_task_files(tid: str) -> bool:

@@ -63,7 +63,7 @@ def run_id_for(tid: str, rerun: bool = False) -> str:
 def trigger_dag(tid: str, rerun: bool = False) -> str:
   """สั่งเริ่ม DAG run หนึ่งครั้งสำหรับ Task นี้ คืน dag_run_id ที่ใช้"""
   if not is_enabled():
-    raise AirflowError("ยังไม่ได้ตั้งค่า SOLAR_AIRFLOW_URL")
+    raise AirflowError("SOLAR_AIRFLOW_URL is not set")
 
   run_id = run_id_for(tid, rerun)
   url = f"{_api_root()}/dags/{DAG_ID}/dagRuns"
@@ -76,11 +76,11 @@ def trigger_dag(tid: str, rerun: bool = False) -> str:
         timeout=TIMEOUT,
     )
   except requests.RequestException as exc:
-    raise AirflowError(f"ติดต่อ Airflow ที่ {base_url()} ไม่ได้: {exc}") from exc
+    raise AirflowError(f"Could not reach Airflow at {base_url()}: {exc}") from exc
 
   if response.status_code not in (200, 409):
     raise AirflowError(
-        f"Airflow ตอบ {response.status_code}: {response.text[:300]}"
+        f"Airflow returned {response.status_code}: {response.text[:300]}"
     )
 
   if response.status_code == 409:
@@ -95,7 +95,7 @@ def fetch_log(run_id: str, step_name: str, try_number: int = 1) -> str:
   try_number เริ่มที่ 1 การลองครั้งที่ 2 เป็นต้นไปมี log แยกไฟล์กัน
   """
   if not is_enabled():
-    raise AirflowError("ยังไม่ได้ตั้งค่า SOLAR_AIRFLOW_URL")
+    raise AirflowError("SOLAR_AIRFLOW_URL is not set")
 
   url = (
       f"{_api_root()}/dags/{DAG_ID}/dagRuns/{run_id}"
@@ -110,13 +110,13 @@ def fetch_log(run_id: str, step_name: str, try_number: int = 1) -> str:
         headers={"Accept": "text/plain"},
     )
   except requests.RequestException as exc:
-    raise AirflowError(f"ติดต่อ Airflow ไม่ได้: {exc}") from exc
+    raise AirflowError(f"Could not reach Airflow: {exc}") from exc
 
   if response.status_code == 404:
-    raise AirflowError("ไม่พบ log ของขั้นตอนนี้ (อาจยังไม่ได้เริ่มทำงาน)")
+    raise AirflowError("No log for this step yet (it may not have started)")
   if response.status_code != 200:
     raise AirflowError(
-        f"Airflow ตอบ {response.status_code}: {response.text[:200]}"
+        f"Airflow returned {response.status_code}: {response.text[:200]}"
     )
   return response.text
 
@@ -124,7 +124,7 @@ def fetch_log(run_id: str, step_name: str, try_number: int = 1) -> str:
 def health() -> dict:
   """ใช้ตรวจว่า Airflow พร้อมรับงานหรือยัง"""
   if not is_enabled():
-    return {"enabled": False, "reachable": False, "detail": "ไม่ได้ตั้งค่า"}
+    return {"enabled": False, "reachable": False, "detail": "not configured"}
 
   try:
     response = requests.get(

@@ -41,8 +41,8 @@ def secret_key() -> str:
   if configured:
     return configured
   print(
-      "[auth] ไม่ได้ตั้ง SOLAR_SECRET_KEY — สุ่มคีย์ชั่วคราว"
-      " session จะหลุดเมื่อรีสตาร์ต"
+      "[auth] SOLAR_SECRET_KEY is not set - using a random key;"
+      " sessions will be dropped when the server restarts"
   )
   return secrets.token_urlsafe(32)
 
@@ -83,7 +83,7 @@ def check_login_rate(request: Request) -> None:
       raise HTTPException(
           status_code=status.HTTP_429_TOO_MANY_REQUESTS,
           detail=(
-              f"ลองเข้าสู่ระบบบ่อยเกินไป กรุณารออีก {retry_after} วินาที"
+              f"Too many sign-in attempts. Please try again in {retry_after} seconds."
           ),
           headers={"Retry-After": str(retry_after)},
       )
@@ -132,7 +132,7 @@ def logout_session(request: Request) -> None:
 def _unauthorized() -> HTTPException:
   return HTTPException(
       status_code=status.HTTP_401_UNAUTHORIZED,
-      detail="กรุณาเข้าสู่ระบบก่อน",
+      detail="Please sign in first",
   )
 
 
@@ -160,7 +160,7 @@ def create_user(name: str, email: str, password: str) -> dict:
   with session_scope() as session:
     exists = session.query(User).filter_by(email=email).one_or_none()
     if exists is not None:
-      raise ValueError(f"อีเมล '{email}' ถูกใช้ไปแล้ว")
+      raise ValueError(f"Email '{email}' is already registered")
 
     user = User(name=name.strip(), email=email, passwd=hash_password(password))
     session.add(user)

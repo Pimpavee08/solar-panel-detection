@@ -62,7 +62,7 @@ def _add_missing_columns() -> None:
       for name, sql_type in columns.items():
         if name not in existing:
           conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
-          print(f"[db] เพิ่มคอลัมน์ {table}.{name}")
+          print(f"[db] added column {table}.{name}")
 
 
 def init_db() -> None:

@@ -124,7 +124,7 @@ class TestRegistrationAndLogin(AuthTestCase):
         json={"email": _email("ghost"), "password": "whatever-123"},
     )
     self.assertEqual(response.status_code, 401)
-    self.assertIn("อีเมลหรือรหัสผ่าน", response.json()["detail"])
+    self.assertIn("Incorrect email or password", response.json()["detail"])
 
   def test_short_password_is_rejected(self):
     response = _client().post(

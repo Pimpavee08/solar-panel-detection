@@ -141,7 +141,7 @@ class TestSolarAPI(unittest.TestCase):
   def test_get_nonexistent_task(self):
     response = self.client.get("/tasks/does-not-exist")
     self.assertEqual(response.status_code, 404)
-    self.assertIn("ไม่พบ Task", response.json()["detail"])
+    self.assertIn("not found", response.json()["detail"])
 
   def test_progress_nonexistent_task(self):
     self.assertEqual(
@@ -201,7 +201,7 @@ class TestLogAndRerun(unittest.TestCase):
     """เทสต์รันในโหมดที่เว็บรัน pipeline เอง จึงไม่มี log แยกราย step"""
     response = self.client.get(f"/tasks/{self.tid}/steps/run_inference/log")
     self.assertEqual(response.status_code, 404)
-    self.assertIn("โปรเซสของเว็บ", response.json()["detail"])
+    self.assertIn("inside the web process", response.json()["detail"])
 
   def test_rerun_resets_steps_and_clears_result(self):
     # ทำให้ดูเหมือนงานที่รันจบแล้วและล้มเหลว

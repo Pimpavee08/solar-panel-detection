@@ -28,7 +28,7 @@ def _fetch_tile(session, tile) -> bytes:
   บนภาพจะเหลือเป็นสีดำแล้วโมเดลจะตรวจไม่เจอแผงโดยที่ไม่มีใครรู้ว่าภาพขาด
   """
   url = GOOGLE_SAT_URL.format(x=tile.x, y=tile.y, z=tile.z)
-  problem = "ไม่ทราบสาเหตุ"
+  problem = "unknown cause"
 
   for attempt in range(TILE_RETRIES):
     try:
@@ -43,7 +43,7 @@ def _fetch_tile(session, tile) -> bytes:
       time.sleep(TILE_BACKOFF * (2 ** attempt))
 
   raise TileDownloadError(
-      f"ดึง tile z{tile.z}/{tile.x}/{tile.y} ไม่สำเร็จหลังลอง {TILE_RETRIES} ครั้ง"
+      f"Could not fetch tile z{tile.z}/{tile.x}/{tile.y} after {TILE_RETRIES} attempts"
       f" ({problem})"
   )
 

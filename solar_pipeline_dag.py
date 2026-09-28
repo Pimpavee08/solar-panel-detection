@@ -43,7 +43,7 @@ def _tid(context) -> str:
   tid = conf.get("tid")
   if not tid:
     raise ValueError(
-        "ต้อง trigger DAG พร้อม conf เช่น {\"tid\": \"<uuid ของ Task>\"}"
+        "This DAG must be triggered with conf, e.g. {\"tid\": \"<Task uuid>\"}"
     )
   return tid
 
@@ -60,7 +60,7 @@ def _step_name(context) -> str:
 
 def _error_text(context) -> str:
   exc = context.get("exception")
-  return f"{type(exc).__name__}: {exc}" if exc else "ไม่ทราบสาเหตุ"
+  return f"{type(exc).__name__}: {exc}" if exc else "unknown cause"
 
 
 # -------------------------------------------------------------
@@ -107,7 +107,7 @@ with DAG(
     dag_id=DAG_ID,
     default_args=default_args,
     description=(
-        "ดึงภาพดาวเทียม รันโมเดลตรวจจับแผงโซลาร์เซลล์ และสรุปผลลงฐานข้อมูล"
+        "Fetch satellite imagery, run the panel detection model, save the summary"
     ),
     start_date=datetime(2026, 1, 1),
     schedule=None,  # ไม่ตั้งเวลา รอรับ trigger จากหน้าเว็บอย่างเดียว

@@ -56,7 +56,7 @@ def create_overlay(
   คืน dict ที่มี path ของไฟล์ ขอบเขตแบบ WGS84 และจำนวน polygon ที่วาด
   """
   if not os.path.exists(tif_path):
-    raise FileNotFoundError(f"ไม่พบภาพถ่ายดาวเทียมที่ {tif_path}")
+    raise FileNotFoundError(f"Satellite image not found at {tif_path}")
 
   with rasterio.open(tif_path) as src:
     rgb = src.read([1, 2, 3])

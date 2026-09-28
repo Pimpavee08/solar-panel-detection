@@ -86,7 +86,7 @@ def run_inference(job_name: str, base_dir: str = "data/inference") -> str:
   config_path = os.path.join(job_dir, f"{job_name}.toml")
 
   if not os.path.exists(config_path):
-    raise FileNotFoundError(f"ไม่พบไฟล์ config ที่ {config_path}")
+    raise FileNotFoundError(f"Config file not found at {config_path}")
 
   os.makedirs(output_dir, exist_ok=True)
 
